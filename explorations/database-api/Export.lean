@@ -1,4 +1,5 @@
 import Dbapi.Demo
+import Dbapi.DemoDo
 import Lean.Data.Json
 
 /-! Writes DDL, seed rows, queries and reference results as JSON for `difftest.py`. -/
@@ -39,6 +40,12 @@ def exactName (n : String) := query
   where s.name == n
   select s.id
 
+def caseD {R} (name : String) (q : Do.Query R) (db : MemDb) : Json :=
+  let r (d : Dialect) := let (sql, ps) := Do.render q d
+    Json.mkObj [("sql", sql), ("params", Json.arr (ps.map Value.toJson))]
+  Json.mkObj [("name", name), ("sqlite", r .sqlite), ("postgres", r .postgres),
+    ("expected", Json.arr ((Do.evalValues q db).toArray.map fun r => Json.arr (r.toArray.map Value.toJson)))]
+
 def schemas : List Schema :=
   [Model.schema School.Of, Model.schema Student.Of, Model.schema Submission.Of]
 
@@ -64,7 +71,12 @@ def exportJson : Json :=
       caseQ "byName (text ordering)" (byName 2) db,
       caseQ "exactName 'ada' (case)" (exactName "ada") db,
       caseQ "inList preload" ((selectFrom Submission).filter (fun s =>
-        Expr.inList s.studentId [10, 11]) |>.orderBy (fun s => s.id) |>.select fun s => s) db])]
+        Expr.inList s.studentId [10, 11]) |>.orderBy (fun s => s.id) |>.select fun s => s) db,
+      caseD "olderStudents (do)" (olderStudentsD 1) db,
+      caseD "topScores (do)" (topScoresD 7) db,
+      caseD "schoolScores (do, 3 tables)" (schoolScoresD 7 "Northside") db,
+      caseD "search, no filters (do)" (search none none) db,
+      caseD "search, both filters (do)" (search (some 1) (some 13)) db])]
 
 #eval IO.FS.writeFile "difftest.json" exportJson.pretty
 
