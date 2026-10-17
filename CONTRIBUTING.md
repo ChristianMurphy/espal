@@ -11,7 +11,10 @@ We write Espal from scratch. Other frameworks shape its design, and we copy or t
 ```bash
 lake build
 lake test
+lean-fmt format $(git ls-files '*.lean')
 ```
+
+Espal follows the layout of [lean-fmt](https://github.com/jcreinhold/lean-fmt). Build the release whose tag matches `lean-toolchain`, then run it as shown. CI rejects files it would change. `lake-manifest.json` keeps the layout Lake writes, so leave it to Lake.
 
 Start each new module with a copyright header and a module docstring. Give each public definition a docstring. Name theorems by the Mathlib naming rules.
 

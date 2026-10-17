@@ -17,3 +17,29 @@ jobs:
           build: "true"
           test: "true"
           check-reservoir-eligibility: "true"
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install elan
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Pick the lean-fmt release that matches lean-toolchain
+        run: |
+          echo "LEAN_FMT_TAG=$(cut -d: -f2 lean-toolchain)" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: ~/lean-fmt
+          key: lean-fmt-${{ env.LEAN_FMT_TAG }}
+      - name: Build lean-fmt
+        run: |
+          if [ ! -x ~/lean-fmt/.lake/build/bin/lean-fmt ]; then
+            git clone --depth 1 --branch "$LEAN_FMT_TAG" https://github.com/jcreinhold/lean-fmt ~/lean-fmt
+            (cd ~/lean-fmt && lake build)
+          fi
+      - name: Build Espal
+        run: lake build && lake build EspalTests
+      - name: Check formatting
+        run: ~/lean-fmt/.lake/build/bin/lean-fmt format --check $(git ls-files '*.lean')
