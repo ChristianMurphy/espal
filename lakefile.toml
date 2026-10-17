@@ -1,0 +1,15 @@
+name = "espal"
+version = "0.0.1"
+description = "A web framework for Lean 4 whose compiler checks routes, queries and pages"
+keywords = ["web", "http", "framework", "dsl", "software-verification"]
+license = "Apache-2.0"
+defaultTargets = ["Espal"]
+testDriver = "EspalTests"
+
+[[lean_lib]]
+name = "Espal"
+
+[[lean_lib]]
+name = "EspalTests"
+srcDir = "tests"
+globs = ["EspalTests.+"]
