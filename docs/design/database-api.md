@@ -1,10 +1,11 @@
 # Database API exploration
 
-This note compares three ways for apps to talk to a database: a query builder, models with relations, and query syntax embedded in Lean. To compare them on evidence, we built a small prototype of each, 891 lines of Lean in total, on the `explore/database-api` branch. The prototype is scratch code and doesn't follow the style rules in `CONTRIBUTING.md`.
+This note compares three ways for apps to talk to a database. They are a query builder, models with relations, and query syntax embedded in Lean, which comes in two flavors. To compare them on evidence, we built a small prototype of each on the `explore/database-api` branch. It comes to about 1,040 lines of Lean, not counting demos and tests. The prototype is scratch code and doesn't follow the style rules in `CONTRIBUTING.md`.
 
 ## Summary
 
-- All three styles build the same typed syntax tree, so one set of proofs covers all of them. The builder and the embedded syntax produce identical SQL for the same query, and a compile-time check confirms it.
+- The builder, the models and the keyword syntax build the same typed syntax tree, so one set of proofs covers all three. The builder and the keyword syntax produce identical SQL for the same query, and a compile-time check confirms it.
+- The `do`-notation flavor needed a different tree, in which the interpreter supplies the type of table variables. That tree gives a real monad, so optional filters are plain `if` statements, and Lean rejects a table variable used outside its query. It also gives the most precise error positions. Compile time per query is about the same for every style.
 - The SQL from each style ran on SQLite 3.45 and Postgres 16 and returned the same rows as the Lean evaluator, with one exception. Under an ICU English collation, Postgres sorts text differently from the evaluator.
 - A renderer bug in the prototype produced a join that SQLite accepts and Postgres rejects. A test suite that ran only on SQLite would have shipped it.
 - The statement budget works but is awkward to write. Lean's `do` notation needs a monad, and a budgeted program isn't one, so code chains `.bind` calls. The exact count also rejects an early return.
@@ -39,7 +40,7 @@ def topScores (a : Int) :=
     |>.select (fun s st => (s.id, st.name, s.score))
 ```
 
-### Embedded syntax
+### Keyword syntax
 
 ```lean
 open Dbapi.QuerySyntax in
@@ -52,7 +53,21 @@ def topScores (a : Int) := query
   select (s.id, st.name, s.score)
 ```
 
-Both produce this SQL, shown here for Postgres and SQL Server:
+### `do` notation
+
+```lean
+open Dbapi.Do in
+def topScores (a : Int) := query% do
+  let s ← from Submission
+  let st ← from Student
+  guard (s.studentId == st.id)
+  guard (s.assessmentId == a && s.score > 50)
+  orderBy s.score desc
+  limit 10
+  select (s.id, st.name, s.score)
+```
+
+The builder and the keyword syntax produce this SQL, shown here for Postgres and SQL Server:
 
 ```sql
 SELECT t0.id, t1.name, t0.score FROM submissions t0 JOIN students t1 ON (t0.student_id = t1.id) WHERE ((t0.assessment_id = $1) AND ($2 < t0.score)) ORDER BY t0.score DESC LIMIT 10
@@ -79,7 +94,7 @@ Writing the same report with a query per student fails to compile.
 
 ## Builder
 
-The builder took 262 lines on top of a 303-line core, and each query adds about 8 ms of compile time.
+The builder took 262 lines on top of a 310-line core, and each query adds about 9 ms of compile time. All compile times in this note are medians of five runs. Each is the extra time a file of 200 queries or 20 models takes over its imports alone.
 
 Lean's `==` returns `Bool` and `<` returns a proposition, so neither can build SQL. The builder uses `==.`, `>.` and `&&.` instead, which read worse than SQL and worse than the embedded syntax.
 
@@ -123,9 +138,9 @@ but is expected to have type
 
 chrisflav/db shows another way to declare models: an attribute on an ordinary structure (`@[model] structure Author where …`), which needs no custom command. lean-linq's `db!` syntax restores `do` notation for budgeted programs, and it prices a loop by the size of the rows it iterates.
 
-## Embedded syntax
+## Keyword syntax
 
-The embedded syntax took 69 lines because it expands to builder calls and adds no meaning of its own. Each query adds 10 to 14 ms of compile time.
+The keyword syntax took 69 lines because it expands to builder calls and adds no meaning of its own. Each query adds about 10 ms of compile time.
 
 Inside clauses, `==`, `&&`, `>` and `∈` work as written, so queries read close to SQL.
 
@@ -136,20 +151,56 @@ The prototype found these problems:
 - **Soft keywords leak into terms.** The first version treated `desc` as a soft keyword, and `order by s.score desc` parsed `desc` as an argument to `s.score`. Every clause keyword has to be a full keyword inside the scope.
 - **Error positions.** A type mismatch in `on s.score == st.name` and a misspelled column in `where s.agee > 12` both point at the `query` keyword, not at the bad clause. Fixing that means carrying source positions through the macro.
 - **Grammar grows with SQL.** Aggregates, `GROUP BY`, subqueries and outer joins each need new grammar as well as builder support.
-- **Two flavors exist.** This prototype and lean-linq's `query!` use SQL keywords. chrisflav/db's `query%` uses `do` notation (`let a ← from Author; guard a.retired; select a`) and needs no new keywords.
+- **Shared tree, shared limits.** Because it expands to the builder, it inherits the limit of three tables.
+
+## `do` notation
+
+The `do` flavor took 238 lines, most of them for its own tree, evaluator and renderer. Each query adds about 12 ms of compile time. chrisflav/db uses the same flavor for its `query%` syntax.
+
+A query here is a program in a monad, written once for every type of table variable. The interpreter chooses that type: rows when it evaluates the query, alias numbers when it writes SQL. That choice of representation has three effects:
+
+- **Optional filters are plain Lean.** A search with optional criteria needs no special API, and each call builds a different statement:
+
+```lean
+def search (school : Option Int) (minAge : Option Int) := query% do
+  let s ← from Student
+  if let some sc := school then guard (s.schoolId == sc)
+  if let some m := minAge then guard (s.age >= m)
+  orderBy s.name
+  select (s.name, s.age)
+```
+
+```sql
+SELECT t0.name, t0.age FROM students t0 ORDER BY t0.name
+SELECT t0.name, t0.age FROM students t0 WHERE (t0.school_id = $1) AND ($2 <= t0.age) ORDER BY t0.name
+```
+
+- **Table variables can't escape.** A table variable from outside the query fails to type-check, because the query must work for every type of variable. A monad that numbered tables by position would accept the stray variable and bind it to whichever table had that number.
+- **No limit on tables.** Each `from` adds a table, with no separate query type for each count.
+
+Errors point closer to the mistake than in the keyword flavor. A misspelled column points at `s.agee` itself, and a type mismatch points at its `guard` line.
+
+The costs:
+
+- **A second tree.** This tree sits beside the one the other styles share, so we would have to restate the injection and tenant proofs for it. Using this representation for every style instead would remove the duplication, but we haven't ported the builder and models to it.
+- **Joins become filters.** The join condition is an ordinary `guard`, so the SQL reads `CROSS JOIN … WHERE` instead of `JOIN … ON`. The results match on both databases, but outer joins would need their own operation.
+- **Two meanings for `==`.** Inside `guard` and `orderBy`, `==` and `>` build SQL. In the surrounding `if`, they compare Lean values. The macro rewrites only those arguments, but a reader has to know where the boundary is.
+- **Same internal names in errors.** A type mismatch reports `failed to synthesize instance of type class IntoP var✝ SqlTy.int (PExpr var✝ SqlTy.text)`, and the stray variable reports a similar message.
 
 ## Findings for every style
 
 ### Differential test
 
-The prototype generated `CREATE TABLE` statements from the models, loaded the same rows into SQLite and Postgres, and ran eight queries through each.
+The prototype generated `CREATE TABLE` statements from the models, loaded the same rows into SQLite and Postgres, and ran 13 queries through each.
 
 | Query | SQLite 3.45 | Postgres 16, C collation | Postgres 16, ICU en-US |
 |---|---|---|---|
-| One table, builder and embedded | match | match | match |
-| Two tables, builder and embedded | match | match | match |
-| Three tables | match | match | match |
+| One table, builder, keyword and `do` | match | match | match |
+| Two tables, builder, keyword and `do` | match | match | match |
+| Three tables, keyword and `do` | match | match | match |
 | Order by name | match | match | **differs** |
+| Search without filters, ordered by name (`do`) | match | match | **differs** |
+| Search with both filters (`do`) | match | match | match |
 | Exact text match | match | match | match |
 | `IN` list | match | match | match |
 
@@ -191,10 +242,17 @@ These differences call for a portable core plus dialect features that the type c
 
 Espal's rule is to learn from these projects and write its own code. lean-linq already solves several problems the prototype hit. It has `do` notation for budgets, it tracks nullability, and it tests dialect rendering against real engines.
 
+## Decisions so far
+
+- Build models and the builder first, and add embedded syntax after them.
+- Declare models with an attribute on an ordinary structure, as chrisflav/db does, instead of a custom command.
+- Reach MySQL and MariaDB through MariaDB Connector/C and SQL Server through FreeTDS. Both are LGPL, and Espal links them as shared libraries.
+
 ## Recommendation
 
-1. Keep one core with the typed tree, the evaluator, and a renderer per database. Test the renderer against each real database in CI.
-2. Ship models and the builder first. Models cover the everyday batteries-included case, and the builder covers the queries models can't express. Add the embedded syntax once the builder settles, since it is thin but brings its own parsing and error-position work.
-3. Give budgets `do` notation and upper bounds before 0.1. The prototype showed that chained `.bind` and exact counts both get in the way.
-4. Write custom error messages for the type-mismatch and N+1 cases, with a `#guard_msgs` test for each.
-5. Add databases in this order: Postgres, SQLite, MySQL and MariaDB, then SQL Server.
+1. Build the core on the representation from the `do` prototype, where the interpreter supplies the type of table variables. Port the builder and models to it. That removes the three-table limit and the second tree, and it keeps table variables inside their query. Port the injection proof first, to find out early what the proofs cost on this representation.
+2. Make `do` notation the embedded syntax, for its error positions and its plain `if` for optional filters. Keep the keyword flavor as a possible later layer on the same core.
+3. Give statement budgets `do` notation and upper bounds before 0.1. The prototype showed that chained `.bind` and exact counts both get in the way.
+4. Write custom error messages for type mismatches, stray table variables and N+1 loops, with a `#guard_msgs` test for each.
+5. Test each renderer against its real database in CI, since the evaluator can't catch rendering bugs.
+6. Add databases in this order: Postgres, SQLite, MySQL and MariaDB, then SQL Server.
