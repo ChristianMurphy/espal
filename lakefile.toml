@@ -8,6 +8,7 @@ testDriver = "EspalTests"
 
 [[lean_lib]]
 name = "Espal"
+leanOptions = { linter.missingDocs = true }
 
 [[lean_lib]]
 name = "EspalTests"

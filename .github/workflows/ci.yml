@@ -15,8 +15,11 @@ jobs:
       - uses: leanprover/lean-action@v1
         with:
           build: "true"
+          build-args: "--wfail"
           test: "true"
           check-reservoir-eligibility: "true"
+      - name: Lint compiled declarations
+        run: lake env lean --run scripts/Lint.lean
 
   format:
     runs-on: ubuntu-latest
@@ -41,5 +44,7 @@ jobs:
           fi
       - name: Build Espal
         run: lake build && lake build EspalTests
-      - name: Check formatting
-        run: ~/lean-fmt/.lake/build/bin/lean-fmt format --check $(git ls-files '*.lean')
+      - name: Check formatting and lint rules
+        run: |
+          ~/lean-fmt/.lake/build/bin/lean-fmt format --check $(git ls-files '*.lean')
+          ~/lean-fmt/.lake/build/bin/lean-fmt check $(git ls-files '*.lean')
