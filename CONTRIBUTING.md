@@ -18,7 +18,7 @@ lean-fmt check $(git ls-files '*.lean')
 
 `--wfail` turns warnings into errors, so a `sorry` or a missing docstring fails the build. `lake lint` runs `scripts/Lint.lean`, which reads the compiled declarations and rejects `unsafe` and `partial` code, calls to `panic!` or to any function whose name ends in `!`, and axioms beyond `propext`, `Classical.choice` and `Quot.sound`.
 
-CI also re-checks every declaration with Lean's kernel checker and with nanoda, an independent checker, and audits axioms with lean-action. If you change a workflow, run `zizmor --persona pedantic .github/workflows`; CI runs it too, and actions stay pinned to commit hashes.
+CI also re-checks every declaration with Lean's kernel checker and audits axioms with lean-action. If you change a workflow, run `zizmor --persona pedantic .github/workflows`; CI runs it too, and actions stay pinned to commit hashes.
 
 Espal follows the layout of [lean-fmt](https://github.com/jcreinhold/lean-fmt). Build the release whose tag matches `lean-toolchain`, then run it as shown. CI rejects files it would change. `lake-manifest.json` keeps the layout Lake writes, so leave it to Lake.
 

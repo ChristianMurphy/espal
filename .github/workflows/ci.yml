@@ -24,17 +24,16 @@ jobs:
         with:
           persist-credentials: false
 
-      # Builds with warnings as errors, runs `lake test` and `lake lint`, then re-checks every
-      # declaration with Lean's own kernel checker and the independent nanoda checker, and fails
-      # on any axiom outside the standard three.
+      # Builds with warnings as errors, runs `lake test` and `lake lint`, re-checks every
+      # declaration with Lean's kernel checker, and fails on any axiom outside the standard three.
+      # lean-action's nanoda step expects a `[package]` table and a root module named after the
+      # package, which this lakefile does not have, so nanoda stays off for now.
       - uses: leanprover/lean-action@24581d74d674803a25a81b10b059c5c0cdd344c6 # v1.6.2
         with:
           build-args: "--wfail"
           test: "true"
           lint: "true"
           leanchecker: "true"
-          nanoda: "true"
-          nanoda-allow-sorry: "false"
           axiom-audit: "true"
 
       - name: Pick the lean-fmt release that matches lean-toolchain
