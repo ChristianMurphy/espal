@@ -1,0 +1,6 @@
+name = "dbapi"
+defaultTargets = ["Dbapi"]
+
+[[lean_lib]]
+name = "Dbapi"
+globs = ["Dbapi.+"]
