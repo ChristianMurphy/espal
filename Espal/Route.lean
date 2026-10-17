@@ -51,9 +51,11 @@ def digitsValue (l : List Char) : Nat :=
 def parseDigits (l : List Char) : Option Nat :=
   if !l.isEmpty && l.all Char.isDigit then some (digitsValue l) else none
 
+/-- Each digit character encodes its value and is an ASCII digit. -/
 theorem digitChar_spec :
     ∀ d, d < 10 → (digitChar d).toNat - 48 = d ∧ (digitChar d).isDigit = true := by decide
 
+/-- The digits of `n` are non-empty, all decimal, and denote `n`. -/
 theorem natToDigits_spec (n : Nat) :
     (natToDigits n).all Char.isDigit = true ∧
       natToDigits n ≠ [] ∧ digitsValue (natToDigits n) = n := by
@@ -70,6 +72,7 @@ theorem natToDigits_spec (n : Nat) :
       rw [hval, this.1]
       omega
 
+/-- Parsing the digits of `n` returns `n`. -/
 theorem parseDigits_natToDigits (n : Nat) : parseDigits (natToDigits n) = some n := by
   have ⟨hall, hne, hval⟩ := natToDigits_spec n
   simp [parseDigits, hall, hne, hval]
@@ -82,6 +85,7 @@ def natSeg (n : Nat) : String :=
 def parseNatSeg (s : String) : Option Nat :=
   parseDigits s.toList
 
+/-- Parsing a printed number returns the number. -/
 @[simp]
 theorem parseNatSeg_natSeg (n : Nat) : parseNatSeg (natSeg n) = some n := by
   simp [parseNatSeg, natSeg, parseDigits_natToDigits]
