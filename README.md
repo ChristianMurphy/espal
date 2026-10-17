@@ -9,7 +9,7 @@ The name is short for espalier, a tree trained along a frame as it grows.
 
 ## Status
 
-Early development. The features above are design goals, and a prototype has shown that query budgets work. The first module, `Espal.Route`, provides typed routes and a decimal path codec with a proved round trip. The design is in progress; see the design notes linked from the issue tracker as they land.
+Early development. The features above are design goals, and a prototype has shown that query budgets work. The first module, `Espal.Route`, provides typed routes and a decimal path codec with a proved round trip. The design is in progress; see the design notes linked from the issue tracker as they land. [ROADMAP.md](ROADMAP.md) lays out the plan for 0.1, the guarantees we aim to claim, and how each one can fail.
 
 ## Building
 
