@@ -7,44 +7,68 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  build:
+  ci:
+    name: Build, verify and check style
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: leanprover/lean-action@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          build: "true"
+          persist-credentials: false
+
+      # Builds with warnings as errors, runs `lake test` and `lake lint`, then re-checks every
+      # declaration with Lean's own kernel checker and the independent nanoda checker, and fails
+      # on any axiom outside the standard three.
+      - uses: leanprover/lean-action@24581d74d674803a25a81b10b059c5c0cdd344c6 # v1.6.2
+        with:
           build-args: "--wfail"
           test: "true"
-          check-reservoir-eligibility: "true"
-      - name: Lint compiled declarations
-        run: lake env lean --run scripts/Lint.lean
+          lint: "true"
+          leanchecker: "true"
+          nanoda: "true"
+          nanoda-allow-sorry: "false"
+          axiom-audit: "true"
 
-  format:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install elan
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
       - name: Pick the lean-fmt release that matches lean-toolchain
         run: |
           echo "LEAN_FMT_TAG=$(cut -d: -f2 lean-toolchain)" >> "$GITHUB_ENV"
-      - uses: actions/cache@v4
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/lean-fmt
           key: lean-fmt-${{ env.LEAN_FMT_TAG }}
+
       - name: Build lean-fmt
         run: |
           if [ ! -x ~/lean-fmt/.lake/build/bin/lean-fmt ]; then
             git clone --depth 1 --branch "$LEAN_FMT_TAG" https://github.com/jcreinhold/lean-fmt ~/lean-fmt
             (cd ~/lean-fmt && lake build)
           fi
-      - name: Build Espal
-        run: lake build && lake build EspalTests
-      - name: Check formatting and lint rules
+
+      - name: Check formatting and lean-fmt rules
         run: |
           ~/lean-fmt/.lake/build/bin/lean-fmt format --check $(git ls-files '*.lean')
           ~/lean-fmt/.lake/build/bin/lean-fmt check $(git ls-files '*.lean')
+
+  zizmor:
+    name: Audit workflows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e # v0.7.1
+        with:
+          version: "1.31.1"
+          persona: pedantic
+          advanced-security: "false"

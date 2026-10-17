@@ -5,6 +5,7 @@ keywords = ["web", "http", "framework", "dsl", "software-verification"]
 license = "Apache-2.0"
 defaultTargets = ["Espal"]
 testDriver = "EspalTests"
+lintDriver = "lint"
 
 [[lean_lib]]
 name = "Espal"
@@ -14,3 +15,8 @@ leanOptions = { linter.missingDocs = true }
 name = "EspalTests"
 srcDir = "tests"
 globs = ["EspalTests.+"]
+
+[[lean_exe]]
+name = "lint"
+root = "Lint"
+srcDir = "scripts"

@@ -6,7 +6,7 @@ Follow the code style in `CONTRIBUTING.md`. In short:
 - No `sorry`, `partial`, `unsafe`, `panic!` or `!` indexing in library code. Errors are values.
 - Structured parsers instead of regular expressions, with a round-trip proof when a printer exists.
 - Hot paths get a reference definition, a fast version proved equal, and a benchmark, and they work over bytes rather than `String`.
-- Run `lake build --wfail`, `lake test`, `lake env lean --run scripts/Lint.lean`, `lean-fmt format --check` and `lean-fmt check` before committing.
+- Run `lake build --wfail`, `lake test`, `lake lint`, `lean-fmt format --check` and `lean-fmt check` before committing. Run `zizmor --persona pedantic .github/workflows` after changing a workflow, and pin actions to commit hashes.
 
 ## Writing
 
