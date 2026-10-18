@@ -1,6 +1,6 @@
 # Roadmap
 
-This plan covers Espal 0.1. It sets the scope and the order of work, and it shows how two example apps exercise each piece. It also describes how we benchmark and lists the guarantees we can claim. For each guarantee it states what the guarantee assumes and how it can break. Items marked **Open** are not settled; each one carries a proposed default. The list of decisions made so far sits near the end.
+This plan covers Espal 0.1. It sets the scope and the order of work, and it shows how two example apps exercise each piece. It also describes how we benchmark and lists the guarantees we can claim. For each guarantee it states what the guarantee assumes and how it can break. The decisions made so far, and any still open, sit at the end.
 
 ## Goal
 
@@ -54,7 +54,7 @@ Each battery is its own Lake package in this repository, and each works without 
 | `espal-client` | The OpenAPI description and the TypeScript client |
 | `espal-cli` | The `espal` command |
 
-No package depends on one listed below it. An app that wants a single package names it with `subDir` in its `[[require]]` entry. Reservoir lists only packages at a repository root, so only `espal` appears there.
+Package names follow `espal-<area>`, and each package's modules live under `Espal.<Area>`, such as `Espal.Query`. No package depends on one listed below it. An app that wants a single package names it with `subDir` in its `[[require]]` entry. Reservoir lists only packages at a repository root, so only `espal` appears there.
 
 ### Building on other projects
 
@@ -317,7 +317,7 @@ The guarantee breaks in these cases:
 - C libraries allocate on their own. libpq holds a whole result in C memory unless the client uses single-row mode.
 - Lean's runtime can't attribute memory to a request. Heartbeats count small allocations per thread rather than bytes, they miss large objects, and requests move between threads. Enforcement therefore counts the bytes Espal buffers, not every allocation.
 
-Tests run each route alone at its limits and compare the process's peak memory with the bound. A process-level limit in production catches what the model misses.
+Tests run each route alone at its limits and compare the process's peak memory with the bound. Until M4 calibrates the model, an overrun shows up in the route report. After M4, it fails CI. A process-level limit in production catches what the model misses.
 
 ### P22. Streaming decoders agree with whole-body decoders (Proved)
 
@@ -371,7 +371,7 @@ The tenant app grades assessments shaped like the QTI domain, without QTI XML im
 
 ## Milestones
 
-Milestones are outcomes without dates (**Open**). M2, M4 and M5 follow the order already agreed: macro, then load test, then TypeScript client.
+Milestones are outcomes without dates. M2, M4 and M5 follow the order already agreed: macro, then load test, then TypeScript client.
 
 ### M0. Foundations (done)
 
@@ -471,7 +471,7 @@ M1 picks the HTTP layer, the Postgres client and the dependencies, and fixes the
 
 0.1 supports Postgres only. M3 designs the dialect interface so the others can follow.
 
-- SQLite, MySQL and MariaDB through MariaDB Connector/C, and SQL Server through FreeTDS.
+- SQLite through leansqlite, the Lean FRO's binding under Apache 2.0. MySQL and MariaDB through MariaDB Connector/C, and SQL Server through FreeTDS.
 - Dialect features gated by type classes, with differential tests and an `EXPLAIN` reader for each database.
 
 ### Research tracks
@@ -491,7 +491,7 @@ These targets come from the earlier proposal. Agreed figures stand; we fix the r
 
 | Target | Status |
 |---|---|
-| Throughput without a database within 2× of Axum and Go | **At risk.** One test ran both on the same machine (Apple M3, 64 connections). Std.Http with the lean4#15174 fix served 9,827 req/s, and Go served 170,865. That is a gap of about 17×. We restate this after M1. |
+| Comparison with Go and Axum | Reported, with no promised ratio. The exam-end burst below is the throughput goal. We found one test that ran both on the same machine (Apple M3, 64 connections). Std.Http with the lean4#15174 fix served 9,827 req/s and Go served 170,865, a gap of about 17×. |
 | With one Postgres read, at least 80% of a bare libpq client | Agreed |
 | At 70% of peak load, p99 under 10 ms and p99.9 under 50 ms | Proposed. Measured on the benchmark app on reference hardware, by the method below. |
 | At twice peak load, excess requests get a `503` within 5 ms | Proposed. Detection as in P15. |
@@ -569,15 +569,14 @@ These came out of the planning discussion in October 2026.
 - **Load target.** 100,000 submissions within one minute at the end of an exam.
 - **Databases in 0.1.** Postgres only.
 - **Benchmark hardware.** GitHub runners for regression checks now, and a dedicated machine for published latency figures by M4.
+- **Throughput goal.** The exam-end burst. Comparisons with Go and Axum get reported without a promised ratio.
+- **Where the plan lives.** This file, with a GitHub milestone and issues for each milestone once M1 starts.
+- **Dates.** None. A milestone ends when its exit criteria pass.
+- **Contributors.** You and Claude until 0.1. Outside pull requests open after the first release.
+- **Memory in CI.** Overruns get reported until M4 calibrates the model, and fail CI after that.
+- **Package names.** `espal-<area>`, with modules under `Espal.<Area>`.
+- **SQLite binding.** leansqlite, when SQLite support arrives after 0.1.
 
 ## Open decisions
 
-Each has a proposed default. You haven't confirmed any of them.
-
-1. **Where the plan lives.** This file, with GitHub milestones and issues once M1 starts.
-2. **Dates and contributors.** Outcome milestones without dates.
-3. **The throughput target.** We restate "within 2× of Axum and Go" after M1.
-4. **HTTP server and Postgres client.** The M1 spikes decide.
-5. **SQLite binding.** leansqlite, which the Lean FRO maintains under Apache 2.0, unless M11 finds a reason to write our own.
-6. **Memory in CI.** Tests report each route's measured memory against its bound. CI doesn't fail on it until M4 has calibrated the model.
-7. **Package names.** The table under Scope is a proposal.
+None right now. The M1 spikes settle the HTTP server, the Postgres client and which dependencies Espal keeps.
