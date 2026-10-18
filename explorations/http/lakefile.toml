@@ -1,0 +1,14 @@
+name = "http-spike"
+defaultTargets = ["spike-std-http", "spike-std-http-small", "spike-bare-async"]
+
+[[lean_exe]]
+name = "spike-std-http"
+root = "Spike.StdHttp"
+
+[[lean_exe]]
+name = "spike-bare-async"
+root = "Spike.BareAsync"
+
+[[lean_exe]]
+name = "spike-std-http-small"
+root = "Spike.StdHttpSmall"

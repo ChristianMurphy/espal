@@ -1,0 +1,16 @@
+{
+ "lscpu": [
+  "CPU(s):                                  4",
+  "Model name:                              Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "Thread(s) per core:                      1",
+  "Hypervisor vendor:                       KVM",
+  "L3 cache:                                260 MiB (1 instance)"
+ ],
+ "kernel": "6.18.44-fc-v139",
+ "memory": "Mem:            15Gi       643Mi       9.5Gi        14Mi       5.9Gi        15Gi",
+ "go": "go version go1.24.7 linux/amd64",
+ "oha": "oha 1.16.0",
+ "server_cpus": "0,1",
+ "load_cpus": "2,3",
+ "connections": 64
+}
