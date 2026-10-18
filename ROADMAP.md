@@ -114,7 +114,7 @@ Every proved claim relies on these parts:
 
 - Lean's kernel, plus Lean's compiler and runtime. The compiler turns the definitions we reason about into machine code, and nobody has verified it.
 - Code behind `@[extern]` and `@[implemented_by]`. A `@[csimp]` swap comes with a proof; an `implemented_by` swap does not.
-- The C libraries Espal links, which are libuv, OpenSSL, libpq if we choose it, MariaDB Connector/C and FreeTDS.
+- The C libraries Espal links, which are libuv, OpenSSL, libpq, MariaDB Connector/C and FreeTDS.
 - The databases, the reverse proxy, the operating system and the network.
 
 ### Route report and escape hatches
@@ -426,10 +426,12 @@ Here we pick the HTTP layer, the Postgres client and the libraries we keep. We a
   - Two processes pinned to one CPU each, behind haproxy, served 2.8 times as much as one process on both CPUs. The proxy itself cost almost nothing.
   - A profile put 42 percent of Std.Http's time in the kernel scheduler, at 26 context switches per request. Mutexes took about 2 percent. The cost comes from handing each async step to another thread, which [lean4#13469](https://github.com/leanprover/lean4/issues/13469) also describes.
   - `Lean.Data.Json` made the server binary 120 MB, against 7.7 MB with a small encoder.
-- **Postgres spike.** We build both candidates far enough to serve `/db`.
-  - libpq over FFI in non-blocking mode, with `uv_poll` on `PQsocket`. This needs a new C binding that runs under the event loop's lock.
-  - A wire-protocol client in Lean with startup, SCRAM-SHA-256 sign-in, extended queries and pipelining. Managed Postgres requires TLS. Lean's runtime exposes nothing from OpenSSL beyond a version number. This path therefore also needs a TLS binding, plus the SHA-256, HMAC and PBKDF2 that SCRAM uses.
-  - The comparison covers query latency, pipelined throughput, lines of C, what each lets us prove, and recovery when a connection drops mid-pipeline.
+- **Postgres spike (done).** We built two clients far enough to serve `/db`, both on Lean 4.36.0-rc1. The [results](bench/results/postgres/2026-10-18-cloud-4vcpu/README.md) come from the same cloud VM as the HTTP spike, with Postgres on one CPU.
+  - The libpq client is 160 lines of C around libpq in pipeline mode. Lean doesn't let a C binding wait on a socket inside its event loop, so each connection has its own thread. With four connections it reached 48,062 queries per second, the Postgres core's limit, at 34 µs of client CPU per query.
+  - The wire client is pure Lean, with SCRAM-SHA-256 sign-in and pipelining. It stopped at 23,955 queries per second at 61 µs per query, because all its I/O shares Lean's one event loop. It has no TLS, and nobody has reviewed its hashing code.
+  - Over HTTP, Std.Http set the limit for both. `/db` served 3,741 requests per second with libpq and 3,283 with the wire client. The same server served 4,383 for `/plaintext`, and Go with pgx served 21,602 for `/db`.
+  - Both recovered on their own when Postgres killed their connections or restarted, in about 0.1 and 2.3 seconds, with no hung requests.
+  - The libpq server links 24 shared libraries at run time, among them OpenSSL, Kerberos and LDAP.
 - **Dependency spikes.** We build each candidate on Espal's toolchain, measure it against what Espal needs, and write down whether we keep or replace it. The candidates pin Lean versions from 4.33 to 4.35 today.
   - lean-linq (MIT) as the query layer. It uses the representation we chose for the core, and it has budgets in `do` notation and drivers for four databases. Its MySQL driver links libmysqlclient, which Espal would swap for MariaDB Connector/C.
   - lean-routing (Apache 2.0) as the router. It derives handler types from route patterns and proves that patterns round-trip. It tests the link round trip, which Espal's own codec proves.
@@ -458,7 +460,7 @@ Here we pick the HTTP layer, the Postgres client and the libraries we keep. We a
 - The query core, with table variables that the interpreter supplies. It comes from lean-linq if the spikes keep it, and from our own code otherwise. Models declared with an attribute, the builder, and query syntax in `do` notation sit on top.
 - Statement budgets with upper bounds and `do` notation. The proofs for [injection](#no-sql-injection), [tenant isolation](#tenant-isolation), [statement budgets](#statement-budget) and [row bounds](#row-bounds-and-query-cost) carry over, with batch lookups through `= ANY($1)`.
 - Collections and safe writes from the defaults.
-- The client the spikes chose, with a connection pool, transactions, prepared statements, and single-row mode for streamed results.
+- The libpq client behind Espal's own client interface, with pipelining, transactions, prepared statements, and single-row mode for streamed results. Its pool waits for a reconnecting connection, where the spike's pool failed requests at once.
 - Migrations, seed data and fixtures generated from the models, and the [schema check at startup](#the-database-matches-the-declared-schema).
 - [Row-level security](#tenant-isolation) policies for each tenanted table.
 - The [differential tests](#the-query-model-matches-each-database) and [`EXPLAIN` checks](#row-bounds-and-query-cost) in CI.
@@ -505,7 +507,7 @@ Here we pick the HTTP layer, the Postgres client and the libraries we keep. We a
 ### Release 0.1
 
 - The Verso documentation site, with a tutorial that builds one endpoint, one query and one page.
-- Release binaries without GMP by default, with shared GMP as an option. Lean links against an old glibc for portability, so a release with shared GMP needs its own GMP build.
+- Release binaries without GMP by default, with shared GMP as an option. They link libpq built without Kerberos and LDAP, or ship it beside the binary. Lean links against an old glibc for portability, so a release with shared GMP needs its own GMP build.
 - A Reservoir listing for the `espal` package, which needs at least two stars and an OSI license.
 
 ### Other databases
@@ -521,7 +523,8 @@ None of these block 0.1.
 
 - [Time and space cost of pure code](#time-and-space-cost-of-pure-code).
 - Our own HTTP/1.1 server on Std.Async. The HTTP spike found room for up to six times Std.Http's throughput on the same runtime.
-- Upstream fixes to Std.Http and Std.Async, such as fewer thread handoffs per request (lean4#13469).
+- Upstream fixes to Std.Http and Std.Async, such as fewer thread handoffs per request (lean4#13469). C bindings also need a way to wait on a socket inside the event loop.
+- A Postgres client in pure Lean, grown from the spike's wire client, once Lean has TLS and a faster event loop.
 - A proof of the [job claim protocol](#background-jobs-run-at-least-once) in Veil.
 - MessagePack, after the [streaming decoders](#streaming-decoders-agree-with-whole-body-decoders) for JSON.
 - Fewer dependencies, once Espal knows which ones it keeps.
@@ -533,7 +536,7 @@ These targets come from the earlier proposal. Agreed figures stand; we fix the r
 | Target | Status |
 |---|---|
 | Comparison with Go and Axum | Reported, with no promised ratio. The exam-end burst below is the throughput goal. In our [HTTP spike](bench/results/http/2026-10-18-cloud-4vcpu/README.md), Std.Http on Lean 4.36.0-rc1 served 4.6 percent of Go's rate on the same two CPUs. That gap is about 22×. An earlier third-party test on an Apple M3 found about 17×. |
-| With one Postgres read, at least 80% of a bare libpq client | Agreed |
+| With one Postgres read, at least 80% of a bare libpq client | Agreed. In the [Postgres spike](bench/results/postgres/2026-10-18-cloud-4vcpu/README.md), the libpq client matched a bare C client, as both reached the Postgres core's limit. |
 | At 70% of peak load, p99 under 10 ms and p99.9 under 50 ms | Proposed. Measured on the benchmark app on reference hardware, by the method below. |
 | At twice peak load, excess requests get a `503` within 5 ms | Proposed. Detection as in [overload and runtime limits](#overload-and-runtime-limits). |
 | Three nodes reach at least 2.7× the throughput of one | Agreed. Holds until Postgres saturates. We report it with the database on its own machine. |
@@ -592,7 +595,7 @@ These came out of the planning discussion in October 2026.
 - **Scope.** Batteries included, built from packages in one repository that also work alone.
 - **Example apps.** A benchmark app and a realistic multi-tenant app.
 - **HTTP layer.** Std.Http from Lean 4.36, run as one process per core behind a proxy. A server of our own stays a research track.
-- **Postgres client.** Spike first, then decide.
+- **Postgres client.** libpq in pipeline mode, behind Espal's own client interface. The pure-Lean wire client stays a research track.
 - **Budgets.** Statements, rows and query cost, and the cost of pure code, with runtime limits as a backstop. Proofs come first.
 - **Memory.** A bound per request from declared limits, streaming by default with each element checked on arrival, and declarative space bounds for pure code.
 - **Reuse.** Prefer existing libraries, and keep the notices of any adapted code. What exists today doesn't limit what Espal attempts.
@@ -626,4 +629,4 @@ These came out of the planning discussion in October 2026.
 
 ## Open decisions
 
-None right now. The remaining spikes settle the Postgres client and which dependencies Espal keeps.
+None right now. The library trials settle which dependencies Espal keeps.

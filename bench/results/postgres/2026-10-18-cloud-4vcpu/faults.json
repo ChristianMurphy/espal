@@ -1,0 +1,80 @@
+[
+ {
+  "server": "go-pgx",
+  "fault": "terminate",
+  "recovery_s": 0.183,
+  "status": {
+   "200": 19983,
+   "503": 16
+  },
+  "errors": {},
+  "max_ms": 495.60268,
+  "p999_ms": 494.504895
+ },
+ {
+  "server": "lean-wire",
+  "fault": "terminate",
+  "recovery_s": 0.155,
+  "status": {
+   "200": 19921,
+   "503": 78
+  },
+  "errors": {},
+  "max_ms": 89.245734,
+  "p999_ms": 36.248903999999996
+ },
+ {
+  "server": "lean-libpq",
+  "fault": "terminate",
+  "recovery_s": 0.095,
+  "status": {
+   "200": 19972,
+   "503": 28
+  },
+  "errors": {
+   "aborted due to deadline": 1
+  },
+  "max_ms": 42.686803000000005,
+  "p999_ms": 19.197814
+ },
+ {
+  "server": "go-pgx",
+  "fault": "restart",
+  "recovery_s": 2.472,
+  "status": {
+   "200": 19757,
+   "503": 242
+  },
+  "errors": {},
+  "max_ms": 131.125547,
+  "p999_ms": 116.616894
+ },
+ {
+  "server": "lean-wire",
+  "fault": "restart",
+  "recovery_s": 2.416,
+  "status": {
+   "200": 19653,
+   "503": 346
+  },
+  "errors": {
+   "aborted due to deadline": 1
+  },
+  "max_ms": 92.383297,
+  "p999_ms": 56.463041
+ },
+ {
+  "server": "lean-libpq",
+  "fault": "restart",
+  "recovery_s": 2.308,
+  "status": {
+   "200": 19844,
+   "503": 155
+  },
+  "errors": {
+   "aborted due to deadline": 2
+  },
+  "max_ms": 81.416196,
+  "p999_ms": 71.000269
+ }
+]
