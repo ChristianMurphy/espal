@@ -2,6 +2,8 @@
 
 Until the 0.1 release, Espal doesn't take outside pull requests. Issues and discussion are welcome, and outside pull requests open after the first release.
 
+Send security bugs through the private form in [SECURITY.md](SECURITY.md), not a public issue.
+
 Espal builds on other projects where they help, and replaces them where they hold it back.
 
 - Prefer depending on an existing library with a license compatible with Apache 2.0 to writing the same thing again.

@@ -76,6 +76,14 @@ Three entries on the OWASP API Security Top 10 (2023) map onto these defaults:
 - API3, broken object property level authorization, meets the declared readable and writable fields.
 - API4, unrestricted resource consumption, meets the limits and budgets.
 
+## Releases and versions
+
+- **Versions.** All packages share one version number and release together, following Semantic Versioning. Before 1.0, a minor release such as 0.2 may break APIs and a patch release may not. Release notes list every break and how to migrate.
+- **Lean.** Each release pins one stable Lean version in `lean-toolchain`. A move to a newer Lean ships as a minor release of its own, and the nightly canary job warns of breakage ahead of time.
+- **Security.** Reports go through GitHub's private vulnerability reporting, as [SECURITY.md](SECURITY.md) describes. Fixes go to the latest release. Before 0.1, only `main` gets fixes.
+- **Documentation.** The documentation site uses [Verso](https://verso.lean-lang.org/doc/latest), the Lean FRO's documentation tool, under Apache 2.0. GitHub Pages serves it at `christianmurphy.github.io/espal`. Verso elaborates the Lean code in a document as it builds, which keeps examples from going stale. Its SubVerso library lets the documents use a different Lean version from the packages. The site uses the logo and favicon in `docs/brand`.
+- **Name.** A check in October 2026 found `espal` free on npm, crates.io and PyPI, and found no owner for `espal.dev`. Others hold `espal.com`, `espal.org` and `espal.net`. Reservoir names each package by its owner, so `@ChristianMurphy/espal` can't collide with another. The TypeScript client needs its npm name, `espal` or a scope such as `@espal`, claimed before M5. MIT's Software Design Group has a research system named Espalier, a spreadsheet with database queries, in a different field.
+
 ## Where the claims run ahead of the plan
 
 The README and the pitch promise more than this plan delivers. We fix these before 0.1.
@@ -463,7 +471,7 @@ M1 picks the HTTP layer, the Postgres client and the dependencies, and fixes the
 
 ### M10. Release 0.1
 
-- Documentation, and a tutorial that builds one endpoint, one query and one page.
+- The Verso documentation site, with a tutorial that builds one endpoint, one query and one page.
 - Release binaries without GMP by default, with shared GMP as an option. Lean links against an old glibc for portability, so a release with shared GMP needs its own GMP build.
 - A Reservoir listing for the `espal` package, which needs at least two stars and an OSI license.
 
@@ -576,6 +584,11 @@ These came out of the planning discussion in October 2026.
 - **Memory in CI.** Overruns get reported until M4 calibrates the model, and fail CI after that.
 - **Package names.** `espal-<area>`, with modules under `Espal.<Area>`.
 - **SQLite binding.** leansqlite, when SQLite support arrives after 0.1.
+- **Versions.** One version for all packages, following Semantic Versioning.
+- **Lean versions.** One stable Lean version per release.
+- **Security reports.** GitHub's private vulnerability reporting.
+- **Documentation.** A Verso site on GitHub Pages.
+- **M1 order.** Open the issues, then run the HTTP spike first.
 
 ## Open decisions
 
