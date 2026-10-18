@@ -1,10 +1,12 @@
 # Contributing to Espal
 
-We write Espal from scratch. Other frameworks shape its design, and we copy or translate none of their code.
+Espal builds on other projects where they help, and replaces them where they hold it back.
 
-- Read other projects to learn from them. Do not copy or port their code.
+- Prefer depending on an existing library with a license compatible with Apache 2.0 to writing the same thing again.
+- You may adapt code from a project under a permissive license. Keep its copyright and license notice with the code, and name the project and its license in the pull request.
+- Keep GPL and LGPL code out of the repository. Espal may link LGPL libraries as shared libraries.
 - When a design draws on another project, name that project in the pull request.
-- Sign off each commit (`git commit -s`) to certify that the work is your own, under the [Developer Certificate of Origin](https://developercertificate.org/).
+- Sign off each commit (`git commit -s`) to certify where the work comes from, under the [Developer Certificate of Origin](https://developercertificate.org/).
 
 ## Before a pull request
 
