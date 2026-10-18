@@ -1,0 +1,40 @@
+    23.02%  [k] _raw_spin_unlock_irqrestore
+    19.13%  [k] finish_task_switch.isra.0
+     5.10%  [.] lean_alloc_small_object_core
+     3.50%  [.] lean_dec_ref_cold
+     2.97%  [.] mi_malloc
+     2.29%  [.] mi_free
+     1.94%  [k] irqentry_exit_to_user_mode
+     1.50%  [.] mi_page_thread_collect_to_local(mi_page_s*, mi_block_s*)
+     1.44%  [.] lean_apply_1
+     1.32%  [.] lean_apply_2
+     1.26%  [.] lean_mark_mt
+     1.18%  [.] lean::lean_del_core_other(lean_object*, unsigned char, lean_object*)
+     1.15%  [.] mi_free_block_mt(mi_page_s*, mi_block_s*, bool, bool)
+     1.15%  [.] pthread_mutex_lock@@GLIBC_2.2.5
+     0.89%  [.] lean_free_object
+     0.82%  [.] lean::task_manager::run_task(std::__1::unique_lock<std::__1::mutex>&, lean_task*)
+     0.81%  [.] pthread_mutex_unlock@@GLIBC_2.2.5
+     0.72%  [.] lean::task_manager::resolve(lean_task*, lean_object*)
+     0.62%  [.] lean_st_ref_get
+     0.56%  [k] do_syscall_64
+     0.54%  [.] lean::task_manager::resolve_core(std::__1::unique_lock<std::__1::mutex>&, lean_task*, lean_object*)
+     0.52%  [k] futex_hash
+     0.50%  [.] malloc
+     0.42%  [k] futex_wake
+     0.40%  [.] __GI___lll_lock_wait
+     0.37%  [.] pthread_cond_broadcast@@GLIBC_2.3.2
+     0.34%  [.] l___private_Std_Internal_Parsec_ByteArray_0__Std_Internal_Parsec_ByteArray_scanWhileUpTo
+     0.33%  [.] lean::task_manager::spawn_worker()::{lambda()#1}::operator()() const
+     0.31%  [k] _raw_spin_unlock_irq
+     0.31%  [k] __schedule
+     0.31%  [.] lp_http_x2dspike___private_Std_Async_Basic_0__Std_Async_EAsync_forIn_loop___at___00__private_Std_Http_Server_Connection_0__Std_Http_Server_Connection_handle___at___00Std_Http_Server_serveConnection___at___00Std_Http_Server_serve___at___00main_spec__0_spec__1_spec__2_spec__8
+     0.30%  [.] pthread_cond_wait@@GLIBC_2.3.2
+     0.29%  [.] cfree@GLIBC_2.2.5
+     0.28%  [.] _int_free
+     0.26%  [.] l___private_Std_Async_Basic_0__Std_Async_BaseAsync_bind_bindAsyncTask___redArg
+     0.25%  [.] l___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Std_Async_Selectable_combine_spec__4___redArg
+     0.24%  [.] _int_malloc
+     0.23%  [.] __GI___lll_lock_wake
+     0.23%  [.] pthread_mutex_trylock@@GLIBC_2.34
+     0.22%  [k] futex_wake_mark

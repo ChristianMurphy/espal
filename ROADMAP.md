@@ -420,7 +420,12 @@ One follow-up remains. Lean 4.35 added `lake check`, which builds the project, r
 Here we pick the HTTP layer, the Postgres client and the libraries we keep. We also fix the numbers in the performance targets.
 
 - **Toolchain.** Lean 4.35.0 has two server bugs that later releases fix. Each socket read blocks a pool thread, fixed by [lean4#15174](https://github.com/leanprover/lean4/pull/15174). The `Date` header reads the time zone database on every response. In a container without one, the server sends no response at all ([lean4#15442](https://github.com/leanprover/lean4/issues/15442), fixed by #15443 and #15469). Both fixes are in v4.36.0-rc1, released October 14. We spike on 4.35.0 and 4.36.0-rc1 and move to 4.36.0 when it ships.
-- **HTTP spike.** We serve `/plaintext` and `/json` on Std.Http and measure them by the method below. First one process, then N processes on separate ports behind a proxy. Std.Http runs one libuv loop behind one lock and has no `SO_REUSEPORT` binding, so N processes are how a machine's cores get used. A bare Std.Async loop sets the ceiling for any Lean server on this runtime, and Go `net/http` on the same machine sets a reference point. We also profile the lock contention reported in [lean4#13469](https://github.com/leanprover/lean4/issues/13469).
+- **HTTP spike (done).** We served `/plaintext` and `/json` on Std.Http, a bare Std.Async loop and Go `net/http`, on Lean 4.35.0 and 4.36.0-rc1. The [results](bench/results/http/2026-10-18-cloud-4vcpu/README.md) come from a shared 4-vCPU cloud VM with shortened runs, so they guide the choice and stay out of published claims.
+  - On 4.36.0-rc1, Std.Http served about 4,300 requests per second on two CPUs, 4.6 percent of Go. On 4.35.0 it served about 900.
+  - Std.Http spent ten times the CPU per request of the bare loop. The bare loop reached 29 percent of Go, so a server of our own has room to grow but stays well behind Go.
+  - Two processes pinned to one CPU each, behind haproxy, served 2.8 times as much as one process on both CPUs. The proxy itself cost almost nothing.
+  - A profile put 42 percent of Std.Http's time in the kernel scheduler, at 26 context switches per request. Mutexes took about 2 percent. The cost comes from handing each async step to another thread, which [lean4#13469](https://github.com/leanprover/lean4/issues/13469) also describes.
+  - `Lean.Data.Json` made the server binary 120 MB, against 7.7 MB with a small encoder.
 - **Postgres spike.** We build both candidates far enough to serve `/db`.
   - libpq over FFI in non-blocking mode, with `uv_poll` on `PQsocket`. This needs a new C binding that runs under the event loop's lock.
   - A wire-protocol client in Lean with startup, SCRAM-SHA-256 sign-in, extended queries and pipelining. Managed Postgres requires TLS. Lean's runtime exposes nothing from OpenSSL beyond a version number. This path therefore also needs a TLS binding, plus the SHA-256, HMAC and PBKDF2 that SCRAM uses.
@@ -440,9 +445,9 @@ Here we pick the HTTP layer, the Postgres client and the libraries we keep. We a
 - Split the repository into the packages listed under Scope, with the `espal` package at the root.
 - Port the prototype's `route_type` and `api` macros, or build them on lean-routing if the spikes keep it. The route codec moves to bytes, and helpers become private.
 - An endpoint declares its method, path, parameters, body, response, typed errors, permission and statement budget.
-- A `LawfulJson` deriving handler generates the round-trip proof that [client and server agreement](#client-and-server-agree) needs, and [streaming decoders](#streaming-decoders-agree-with-whole-body-decoders) come with the chunk-split proof.
+- JSON encoding of our own, since `Lean.Data.Json` makes a server binary 120 MB, well over the 10 MB target. A `LawfulJson` deriving handler generates the round-trip proof that [client and server agreement](#client-and-server-agree) needs, and [streaming decoders](#streaming-decoders-agree-with-whole-body-decoders) come with the chunk-split proof.
 - Errors use problem details. A decode failure returns `400` and names the field.
-- The default limits, memory bounds per request, `413` for oversized bodies, and the [memory pool](#memory-per-request-stays-within-a-declared-bound).
+- The default limits, memory bounds per request, `413` for oversized bodies, and the [memory pool](#memory-per-request-stays-within-a-declared-bound). Espal raises Std.Http's limit of 100 requests per keep-alive connection, which forces a proxy to reconnect often.
 - The route report and `Espal.escape`. The report includes what the earlier app audit found: `unsafe`, `extern`, `implemented_by`, `initialize` and extra axioms that handlers can reach, as [stateless handlers](#stateless-handlers) describes.
 - The OpenAPI 3.2.1 description.
 - **Tests.** A `#guard_msgs` test with the exact message for each rejection: shadowed route, unreachable endpoint, missing handler, wrong body type. Compile-time benchmarks as described under [every endpoint is reachable](#every-endpoint-is-reachable).
@@ -515,8 +520,8 @@ Here we pick the HTTP layer, the Postgres client and the libraries we keep. We a
 None of these block 0.1.
 
 - [Time and space cost of pure code](#time-and-space-cost-of-pure-code).
-- Our own HTTP/1.1 server, if the spikes call for it.
-- Upstream fixes to Std.Http and Std.Async, such as the mutexes per request described in lean4#13469.
+- Our own HTTP/1.1 server on Std.Async. The HTTP spike found room for up to six times Std.Http's throughput on the same runtime.
+- Upstream fixes to Std.Http and Std.Async, such as fewer thread handoffs per request (lean4#13469).
 - A proof of the [job claim protocol](#background-jobs-run-at-least-once) in Veil.
 - MessagePack, after the [streaming decoders](#streaming-decoders-agree-with-whole-body-decoders) for JSON.
 - Fewer dependencies, once Espal knows which ones it keeps.
@@ -527,7 +532,7 @@ These targets come from the earlier proposal. Agreed figures stand; we fix the r
 
 | Target | Status |
 |---|---|
-| Comparison with Go and Axum | Reported, with no promised ratio. The exam-end burst below is the throughput goal. We found one test that ran both on the same machine (Apple M3, 64 connections). Std.Http with the lean4#15174 fix served 9,827 req/s and Go served 170,865, a gap of about 17×. |
+| Comparison with Go and Axum | Reported, with no promised ratio. The exam-end burst below is the throughput goal. In our [HTTP spike](bench/results/http/2026-10-18-cloud-4vcpu/README.md), Std.Http on Lean 4.36.0-rc1 served 4.6 percent of Go's rate on the same two CPUs. That gap is about 22×. An earlier third-party test on an Apple M3 found about 17×. |
 | With one Postgres read, at least 80% of a bare libpq client | Agreed |
 | At 70% of peak load, p99 under 10 ms and p99.9 under 50 ms | Proposed. Measured on the benchmark app on reference hardware, by the method below. |
 | At twice peak load, excess requests get a `503` within 5 ms | Proposed. Detection as in [overload and runtime limits](#overload-and-runtime-limits). |
@@ -553,7 +558,7 @@ A framework's latency depends on the app. Every figure therefore names the workl
 
 ## Project risks
 
-- **Lean's HTTP ceiling.** One libuv loop sits behind one lock. Std.Http uses about five times the CPU per request of a bare Std.Async loop (lean4#13469). We answer with several processes per machine, upstream fixes, and our own server as a fallback.
+- **Lean's HTTP ceiling.** In the [HTTP spike](bench/results/http/2026-10-18-cloud-4vcpu/README.md), Std.Http used ten times the CPU per request of a bare Std.Async loop. Most of it went to handoffs between threads (lean4#13469). We answer with one process per core, upstream fixes, and our own server as a fallback.
 - **Proofs about the wrong thing.** Each proof covers a model: the query evaluator, the HTML tree, the Lean client, the memory model of Espal's buffers. Each proved claim therefore gets a test against the real system. The sections on [client and server agreement](#client-and-server-agree), [the query model](#the-query-model-matches-each-database), [safe HTML](#safe-html) and [memory per request](#memory-per-request-stays-within-a-declared-bound) describe those tests.
 - **Escape hatches.** Apps that use raw SQL or global state lose guarantees. The route report names every escape hatch and what it voids, and the strict profile rejects them. Row-level security backs up tenant isolation on Postgres and SQL Server.
 - **Proof burden on app authors.** If ordinary endpoints need hand-written proofs, few people will use Espal. The target is zero hand-written proofs in the benchmark app, and proofs in the tenant app only for grading rules.
@@ -586,7 +591,8 @@ These came out of the planning discussion in October 2026.
 
 - **Scope.** Batteries included, built from packages in one repository that also work alone.
 - **Example apps.** A benchmark app and a realistic multi-tenant app.
-- **HTTP layer and Postgres client.** Spike first, then decide.
+- **HTTP layer.** Std.Http from Lean 4.36, run as one process per core behind a proxy. A server of our own stays a research track.
+- **Postgres client.** Spike first, then decide.
 - **Budgets.** Statements, rows and query cost, and the cost of pure code, with runtime limits as a backstop. Proofs come first.
 - **Memory.** A bound per request from declared limits, streaming by default with each element checked on arrival, and declarative space bounds for pure code.
 - **Reuse.** Prefer existing libraries, and keep the notices of any adapted code. What exists today doesn't limit what Espal attempts.
@@ -620,4 +626,4 @@ These came out of the planning discussion in October 2026.
 
 ## Open decisions
 
-None right now. The spikes settle the HTTP server, the Postgres client and which dependencies Espal keeps.
+None right now. The remaining spikes settle the Postgres client and which dependencies Espal keeps.
