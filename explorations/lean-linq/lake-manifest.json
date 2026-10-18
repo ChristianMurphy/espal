@@ -1,0 +1,16 @@
+{"version": "1.3.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "https://github.com/palladin/lean-linq",
+   "type": "git",
+   "subDir": null,
+   "scope": "",
+   "rev": "463e34a331e0912170b3116b76b98b17ca3a67bd",
+   "name": "«lean-linq»",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "463e34a331e0912170b3116b76b98b17ca3a67bd",
+   "inherited": false,
+   "configFile": "lakefile.lean"}],
+ "name": "«linq-trial»",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}

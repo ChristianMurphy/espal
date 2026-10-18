@@ -1,0 +1,34 @@
+diff --git a/lakefile.lean b/lakefile.lean
+index 8241831..db2c3f9 100644
+--- a/lakefile.lean
++++ b/lakefile.lean
+@@ -8,7 +8,7 @@ open Lake DSL
+ -- linker finds both (libsqlite3-dev, libpq-dev).
+ open Lean Elab Term in
+ elab "dbLinkArgs%" : term => do
+-  let base := #["-lsqlite3", "-lpq", "-lsybdb", "-lmysqlclient"]
++  let base := #["-lsqlite3", "-lpq", "-lsybdb", "-lmariadb"]
+   let args ←
+     if System.Platform.isOSX then do
+       let sdk ← IO.Process.output { cmd := "xcrun", args := #["--show-sdk-path"] }
+@@ -41,7 +41,7 @@ elab "dbLinkArgs%" : term => do
+       let sqlite ← find ["libsqlite3.so", "libsqlite3.so.0"] "libsqlite3"
+       let pq ← find ["libpq.so", "libpq.so.5"] "libpq"
+       let tds ← find ["libsybdb.so", "libsybdb.so.5"] "libsybdb (freetds)"
+-      let my ← find ["libmysqlclient.so", "libmysqlclient.so.21"] "libmysqlclient"
++      let my ← find ["libmariadb.so", "libmariadb.so.3"] "libmariadb"
+       -- The system .so files carry glibc symbol versions newer than the
+       -- toolchain's bundled glibc can satisfy at link time; at run time the
+       -- system loader resolves them against the system glibc (same distro,
+@@ -89,9 +89,9 @@ elab "mysqlIncludeDir%" : term => do
+       pure (my.stdout.trimAscii.toString ++ "/include/mysql")
+     else do
+       try
+-        let out ← IO.Process.output { cmd := "mysql_config", args := #["--variable=pkgincludedir"] }
++        let out ← IO.Process.output { cmd := "mariadb_config", args := #["--variable=pkgincludedir"] }
+         pure out.stdout.trimAscii.toString
+-      catch _ => pure "/usr/include/mysql"
++      catch _ => pure "/usr/include/mariadb"
+   return Lean.toExpr dir
+ 
+ def mysqlIncludeDir : String := mysqlIncludeDir%
