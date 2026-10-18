@@ -14,6 +14,7 @@ Everything ran on the same shared 4-vCPU cloud VM as the HTTP and Postgres spike
 - `patches/lean-4.36.patch` is the change lean-linq needs on Lean 4.36.0-rc1.
 - `patches/mariadb-connector-c.patch` points lean-linq's MySQL driver at MariaDB Connector/C.
 - `module_probe.py` is the first step of moving lean-linq to the module system.
+- `upstream/` holds the changes offered to lean-linq, as patches with descriptions, and the order to send them in.
 
 ## Running it
 

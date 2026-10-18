@@ -1,0 +1,173 @@
+From 8b1bf54491495c37f6ba2ec26d555271f4500fb3 Mon Sep 17 00:00:00 2001
+From: Christian Murphy <christian.murphy.42@gmail.com>
+Date: Sun, 18 Oct 2026 22:44:20 +0000
+Subject: [PATCH] Clear build warnings
+
+Replace the deprecated if_pos and if_neg with ite_eq_left and ite_eq_right, drop simp arguments the linter reports as unused, and replace unused variables with _. The inst binders in the mutual block of Core/Expr.lean and in DbOp look unused but patterns match them by name, so the unused-variables linter is off for those two declarations instead.
+
+Signed-off-by: Christian Murphy <christian.murphy.42@gmail.com>
+---
+ LeanLinq/Core/Expr.lean  |  3 +++
+ LeanLinq/Core/Table.lean |  8 ++++----
+ LeanLinq/Db.lean         | 17 +++++++++--------
+ LeanLinq/Freer.lean      |  2 +-
+ LeanLinq/Statements.lean |  4 ++--
+ 5 files changed, 19 insertions(+), 15 deletions(-)
+
+diff --git a/LeanLinq/Core/Expr.lean b/LeanLinq/Core/Expr.lean
+index bb47303..30090e7 100644
+--- a/LeanLinq/Core/Expr.lean
++++ b/LeanLinq/Core/Expr.lean
+@@ -75,6 +75,9 @@ the whole AST is one mutual family, so a correlated subquery is simply a
+ This is what binders at the opaque atom (`ρ s → …`) buy: the mutual
+ occurrences all sit in positive positions. Construct them with
+ `SqlExpr.inQuery`/`.exists'`/`ScalarQuery.embed`. -/
++-- Constructor binders such as `inst` are named so that patterns can match them by name
++-- (`.fromT (inst := i) ..`), which the unused-variables linter can't see.
++set_option linter.unusedVariables false in
+ mutual
+ 
+ /-- Intrinsically-typed SQL expressions (see the section comment above).
+diff --git a/LeanLinq/Core/Table.lean b/LeanLinq/Core/Table.lean
+index 74e039d..18f929c 100644
+--- a/LeanLinq/Core/Table.lean
++++ b/LeanLinq/Core/Table.lean
+@@ -61,7 +61,7 @@ private theorem le_sizes_head {n : String} {s : Schema} {ts : List (String × Sc
+     (rs : List (Values s)) (env : TableEnv ts) :
+     rs.length ≤ TableEnv.sizes (.cons rs env : TableEnv ((n, s) :: ts)) n := by
+   show rs.length ≤ if n = n then Nat.max rs.length (env.sizes n) else env.sizes n
+-  rw [if_pos rfl]
++  rw [ite_eq_left rfl]
+   exact Nat.le_max_left ..
+ 
+ private theorem le_sizes_tail {n n' : String} {s' : Schema}
+@@ -70,10 +70,10 @@ private theorem le_sizes_tail {n n' : String} {s' : Schema}
+     k ≤ TableEnv.sizes (.cons rs env : TableEnv ((n', s') :: ts)) n := by
+   show k ≤ if n = n' then Nat.max rs.length (env.sizes n) else env.sizes n
+   by_cases hq : n = n'
+-  · rw [if_pos hq]
++  · rw [ite_eq_left hq]
+     subst hq
+     exact Nat.le_trans hk (Nat.le_max_right ..)
+-  · rwa [if_neg hq]
++  · rwa [ite_eq_right hq]
+ 
+ private theorem sizes_cons {n : String} {s : Schema} {ts : List (String × Schema)}
+     (rs : List (Values s)) (env : TableEnv ts) (m : String) :
+@@ -87,7 +87,7 @@ instance (priority := high) : HasTable ((n, s) :: ts) n s where
+   sizes_set_other
+     | .cons rs env, rs', m, hm => by
+         simp only []
+-        rw [sizes_cons, sizes_cons, if_neg hm, if_neg hm]
++        rw [sizes_cons, sizes_cons, ite_eq_right hm, ite_eq_right hm]
+   sizes_set_mono
+     | .cons rs env, rs', m, hlen => by
+         simp only []
+diff --git a/LeanLinq/Db.lean b/LeanLinq/Db.lean
+index 686541c..939b2ef 100644
+--- a/LeanLinq/Db.lean
++++ b/LeanLinq/Db.lean
+@@ -76,6 +76,9 @@ namespace LeanLinq
+ 
+ /-! ## The effect signature -/
+ 
++-- Constructor binders such as `inst` are named so that patterns can match them by name
++-- (`.insert (inst := _) i`), which the unused-variables linter can't see.
++set_option linter.unusedVariables false in
+ /-- Seven query/write operations, plus a user error that issues no statement.
+ The signature is *data* — `dbOpWp` gives each op its graded spec, the
+ model gives each op a certified handler, and the drivers give each op
+@@ -580,7 +583,7 @@ parents still cost bill 1. This is how N+1 collapses to 1+1. -/
+ def DbP.fetchFor {mode : ScopeMode} [SqlLit t] (keys : List t.interp)
+     (mk : (∀ {ρ}, List (SqlExprP ρ c ⟨t, true⟩)) → Query c s) :
+     DbM mode c 1 (List (Values s)) :=
+-  DbP.map id (DbP.fetch (mk fun {ρ} => keys.map fun k => .widen (SqlLit.lit k)))
++  DbP.map id (DbP.fetch (mk fun {_} => keys.map fun k => .widen (SqlLit.lit k)))
+ 
+ /-- Fetch at most `n` rows, **with the bound in the type**: applies
+ `LIMIT n` to the query and returns a length-refined list — the evidence
+@@ -893,7 +896,7 @@ theorem sizes_of_insert {n : String} {s : Schema} [inst : HasTable c.tables n s]
+     TableEnv.sizes env' n ≤ TableEnv.sizes env n + 1 ∧ k = 1 := by
+   unfold InsertStmt.applyCount at h
+   simp only [Bind.bind, Except.bind, Pure.pure, Except.pure,
+-      Functor.map, Except.map, throw, throwThe, MonadExceptOf.throw] at h
++      throw, throwThe, MonadExceptOf.throw] at h
+   split at h
+   · contradiction
+   · split at h
+@@ -922,7 +925,7 @@ theorem sizes_of_update {n : String} {s : Schema} [inst : HasTable c.tables n s]
+     k ≤ TableEnv.sizes env n := by
+   unfold UpdateStmt.applyCount at h
+   simp only [Bind.bind, Except.bind, Pure.pure, Except.pure,
+-      Functor.map, Except.map, throw, throwThe, MonadExceptOf.throw] at h
++      throw, throwThe, MonadExceptOf.throw] at h
+   split at h
+   · contradiction
+   · split at h
+@@ -952,8 +955,7 @@ theorem sizes_of_delete {n : String} {s : Schema} [inst : HasTable c.tables n s]
+     TableEnv.sizes env' n ≤ TableEnv.sizes env n ∧
+     TableEnv.sizes env n ≤ TableEnv.sizes env' n + k := by
+   unfold DeleteStmt.applyCount at h
+-  simp only [Bind.bind, Except.bind, Pure.pure, Except.pure,
+-      Functor.map, Except.map, throw, throwThe, MonadExceptOf.throw] at h
++  simp only [Bind.bind, Except.bind, Pure.pure, Except.pure] at h
+   split at h
+   all_goals first
+     | contradiction
+@@ -979,8 +981,7 @@ theorem sizes_of_insertSelect {n : String} {s : Schema}
+     TableEnv.sizes env' n ≤ TableEnv.sizes env n + k ∧
+     k ≤ (Query.gcard st.source).eval (TableEnv.sizes env) := by
+   unfold InsertSelectStmt.applyCount at h
+-  simp only [Bind.bind, Except.bind, Pure.pure, Except.pure,
+-      Functor.map, Except.map, throw, throwThe, MonadExceptOf.throw] at h
++  simp only [Bind.bind, Except.bind, Pure.pure, Except.pure] at h
+   split at h
+   all_goals first
+     | contradiction
+@@ -1011,7 +1012,7 @@ theorem sizes_of_insertValues {n : String} {s : Schema}
+     k = st.rows.length := by
+   unfold InsertValuesStmt.applyCount at h
+   simp only [Bind.bind, Except.bind, Pure.pure, Except.pure,
+-      Functor.map, Except.map, throw, throwThe, MonadExceptOf.throw] at h
++      throw, throwThe, MonadExceptOf.throw] at h
+   split at h
+   · contradiction
+   · injection h with h
+diff --git a/LeanLinq/Freer.lean b/LeanLinq/Freer.lean
+index 9e48788..c9f1b75 100644
+--- a/LeanLinq/Freer.lean
++++ b/LeanLinq/Freer.lean
+@@ -66,7 +66,7 @@ theorem le_trans {w₁ w₂ w₃ : Wp α} (h₁ : w₁.le w₂) (h₂ : w₂.le
+ themselves needed, because `le` quantifies over every post. -/
+ theorem bind_le_bind_left {w₁ w₂ : Wp α} (f : α → Wp β) (h : w₁.le w₂) :
+     (w₁.bind f).le (w₂.bind f) :=
+-  fun post σ k hw => h _ σ k hw
++  fun _ σ k hw => h _ σ k hw
+ 
+ end Wp
+ 
+diff --git a/LeanLinq/Statements.lean b/LeanLinq/Statements.lean
+index 580c6e1..695cbcd 100644
+--- a/LeanLinq/Statements.lean
++++ b/LeanLinq/Statements.lean
+@@ -26,7 +26,7 @@ def InsertStmt.value (i : InsertStmt ts n s) (name : String) {t : SqlPrim}
+ 
+ /-- Insert NULL — only into a column the schema declares NULL-capable. -/
+ def InsertStmt.valueNull (i : InsertStmt ts n s) (name : String) {t : SqlPrim}
+-    {nl : Bool} [HasCol s name ⟨t, nl⟩] (h : nl = true := by rfl) :
++    {nl : Bool} [HasCol s name ⟨t, nl⟩] (_h : nl = true := by rfl) :
+     InsertStmt ts n s :=
+   { i with values := i.values ++ [(name, ⟨⟨t, true⟩, .nullC t⟩)] }
+ 
+@@ -51,7 +51,7 @@ def UpdateStmt.setWith (u : UpdateStmt ts n s) (name : String) {t : SqlPrim}
+ 
+ /-- Set NULL — only on a column the schema declares NULL-capable. -/
+ def UpdateStmt.setNull (u : UpdateStmt ts n s) (name : String) {t : SqlPrim}
+-    {nl : Bool} [HasCol s name ⟨t, nl⟩] (h : nl = true := by rfl) :
++    {nl : Bool} [HasCol s name ⟨t, nl⟩] (_h : nl = true := by rfl) :
+     UpdateStmt ts n s :=
+   { u with sets := u.sets ++ [(name, fun _ => ⟨⟨t, true⟩, .nullC t⟩)] }
+ 
+-- 
+2.43.0
+
