@@ -1,4 +1,4 @@
-On Lean 4.35.0, lean-linq logs 33 warnings besides the `String.data` deprecation. A project that builds with `lake build --wfail` treats warnings in its dependencies as errors, so it can't depend on lean-linq while they're there. The deprecated names will also go away in a later Lean release, as `String.data` did in 4.36.
+On Lean 4.35.0, lean-linq logs 33 warnings besides the `String.data` deprecation. `lake build --wfail` counts warnings in dependencies too, so a project that builds with it fails once it adds lean-linq. Lean also drops deprecated names in later releases, as it did with `String.data` in 4.36.
 
 This change:
 
