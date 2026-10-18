@@ -32,7 +32,7 @@ Espal won't offer GraphQL, because typed REST endpoints and the generated client
 
 ### Databases
 
-Postgres comes first. Adapters let apps use existing MySQL, MariaDB or SQL Server databases, and SQLite serves apps that run on it. MySQL and MariaDB go through MariaDB Connector/C, and SQL Server goes through FreeTDS. Both are LGPL, and Espal links them as shared libraries. Espal avoids libmysqlclient. Its license is GPLv2 with an exception for open-source software, and the exception doesn't cover closed-source apps.
+Postgres comes first, and 0.1 supports only Postgres. Later adapters let apps use existing MySQL, MariaDB or SQL Server databases, and SQLite serves apps that run on it. MySQL and MariaDB go through MariaDB Connector/C, and SQL Server goes through FreeTDS. Both are LGPL, and Espal links them as shared libraries. Espal avoids libmysqlclient. Its license is GPLv2 with an exception for open-source software, and the exception doesn't cover closed-source apps.
 
 Unit tests run on the Lean evaluator, not SQLite, so they use the same rules as the proofs. Integration tests run on each real database. The prototype had a bug in its SQL that SQLite let through and Postgres caught.
 
@@ -356,13 +356,13 @@ TechEmpower's rules keep the comparison fair. Every response carries `Server` an
 
 ### Tenant app
 
-**Open.** Which realistic app to build. The proposed default is a grading app shaped like the QTI domain, without QTI XML import at first. Schools are tenants, and assessments, items, submissions and grading rules live in Postgres. The app grows with each milestone.
+The tenant app grades assessments shaped like the QTI domain, without QTI XML import at first. Schools are tenants, and assessments, items, submissions and grading rules live in Postgres. The app grows with each milestone.
 
 | Milestone | What the app adds |
 |---|---|
 | M2 | Pure grading endpoints, such as `POST /grade`, with proofs that scores stay between zero and the item's maximum |
 | M3 | Schools, assessments, items and submissions in Postgres, scoped by tenant, with statement and row budgets |
-| M4 | A load profile of many students submitting at the end of an exam |
+| M4 | The exam-end burst from the performance targets: 100,000 submissions in one minute |
 | M5 | A small TypeScript test runner built on the generated client |
 | M6 | Teacher pages listing assessments and results |
 | M7 | Sign-in for teachers and students, with teachers seeing only their own classes |
@@ -461,18 +461,18 @@ M1 picks the HTTP layer, the Postgres client and the dependencies, and fixes the
 - The `espal` command, which creates projects, endpoints, models and migrations.
 - The CI job from P19.
 
-### M10. Other databases
-
-**Open.** Whether this ships in 0.1 or after it.
-
-- SQLite, MySQL and MariaDB through MariaDB Connector/C, and SQL Server through FreeTDS.
-- Dialect features gated by type classes, with differential tests and an `EXPLAIN` reader for each database.
-
-### M11. Release 0.1
+### M10. Release 0.1
 
 - Documentation, and a tutorial that builds one endpoint, one query and one page.
 - Release binaries without GMP by default, with shared GMP as an option. Lean links against an old glibc for portability, so a release with shared GMP needs its own GMP build.
 - A Reservoir listing for the `espal` package, which needs at least two stars and an OSI license.
+
+### M11. Other databases (after 0.1)
+
+0.1 supports Postgres only. M3 designs the dialect interface so the others can follow.
+
+- SQLite, MySQL and MariaDB through MariaDB Connector/C, and SQL Server through FreeTDS.
+- Dialect features gated by type classes, with differential tests and an `EXPLAIN` reader for each database.
 
 ### Research tracks
 
@@ -499,6 +499,7 @@ These targets come from the earlier proposal. Agreed figures stand; we fix the r
 | Losing a node causes under 0.1% errors, all from requests in flight on that node | Proposed. Depends on proxy health checks, draining and retries of idempotent requests. |
 | After a database failover, writes resume within 30 s with no duplicates | Proposed. The Postgres setup controls failover time. Espal's part is reconnecting and idempotency keys. |
 | Zero cross-tenant reads during every fault test | Agreed |
+| At the end of an exam, 100,000 submissions arrive within one minute, about 1,700 per second. Espal stores all of them, loses none and stores none twice. | Agreed. A second run sends half of them in the last ten seconds, about 5,000 per second, to test the admission queue. |
 | Binary under 10 MB, start-up under 100 ms | Agreed. CI checks binary size for both example apps. |
 
 Third parties have published figures from laptops. Std.Http served about 1,600 to 2,400 req/s before the fix and 5,400 to 9,800 after it. A bare Std.Async loop served about 46,000 ([LeanAPI](https://github.com/theoriclabs/leanapi/issues/3), [lean-http-bench](https://github.com/keithadler/lean-http-bench)). These figures motivate M1 and don't replace it.
@@ -510,7 +511,7 @@ A framework's latency depends on the app. Every figure therefore names the workl
 - **Open-loop load.** A closed-loop tool waits for each response before it sends the next request. A stalled server then slows the load as well, and the stall drops out of the percentiles. Benchmarkers call this coordinated omission. We drive load at a fixed arrival rate instead. [oha](https://github.com/hatoo/oha) (MIT) with `-q` and `--latency-correction` is the main tool. [wrk2](https://github.com/giltene/wrk2) (Apache 2.0, unmaintained since 2019) gives a second opinion.
 - **Tool check.** Before we trust a tool, we pause the server with `SIGSTOP` for one second during a run. The reported p99.9 must show the pause.
 - **Procedure.** A short sweep finds the peak rate. We then run at 25, 50, 70, 90 and 200% of peak, each for 60 seconds after a warm-up, five times. Reports plot latency against arrival rate. They give the median and spread of p50, p99, p99.9 and maximum latency. They also give the error rate, CPU time per request and memory.
-- **Hardware (Open).** The proposed default uses GitHub-hosted runners for compile time, binary size and instruction counts, which stay stable on shared machines. Throughput and latency runs use a dedicated machine with a fixed CPU frequency. The load generator runs on separate cores or a separate machine.
+- **Hardware.** GitHub-hosted runners measure compile time, binary size and instruction counts, which stay stable on shared machines. Espal publishes no absolute latency or throughput figures until a dedicated machine with a fixed CPU frequency runs them, by M4 at the latest. The load generator runs on separate cores or a separate machine.
 - **Comparisons.** Go `net/http`, Axum and FastAPI run the same workloads on the same machine, each written as its documentation recommends. We publish their code and settings and invite fixes, because a comparison against a badly tuned baseline tells nobody anything.
 - **Regressions.** CI compares instruction counts and compile times with the main branch and fails on a large regression.
 
@@ -555,7 +556,7 @@ These came out of the planning discussion in October 2026.
 - **Reuse.** Prefer existing libraries, and keep the notices of any adapted code. What exists today doesn't limit what Espal attempts.
 - **GMP.** A shared library or none.
 - **Left out.** GraphQL, a generated admin UI, and live views.
-- **Databases.** Postgres first, then SQLite, MySQL, MariaDB and SQL Server through adapters, with LGPL client libraries linked as shared libraries.
+- **Databases.** Postgres first, then SQLite, MySQL, MariaDB and SQL Server through adapters after 0.1, with LGPL client libraries linked as shared libraries.
 - **Query layer.** Models through an attribute and the builder first, query syntax in `do` notation, and a core whose table variables the interpreter supplies.
 - **Tests.** Unit tests on the Lean evaluator, integration tests on real databases.
 - **Pages.** Partial updates in the style of htmx.
@@ -564,19 +565,19 @@ These came out of the planning discussion in October 2026.
 - **Route report.** One per route, with named escape hatches and a strict profile.
 - **Contracts.** One prototype with `vcgen` in M3 before committing.
 - **Candidate dependencies.** lean-linq, lean-routing, LeanIO and cedar-lean, each evaluated in M1.
+- **Tenant app.** A QTI-shaped grading app, without XML import at first.
+- **Load target.** 100,000 submissions within one minute at the end of an exam.
+- **Databases in 0.1.** Postgres only.
+- **Benchmark hardware.** GitHub runners for regression checks now, and a dedicated machine for published latency figures by M4.
 
 ## Open decisions
 
 Each has a proposed default. You haven't confirmed any of them.
 
 1. **Where the plan lives.** This file, with GitHub milestones and issues once M1 starts.
-2. **Benchmark hardware.** As in the benchmark method.
-3. **Dates and contributors.** Outcome milestones without dates.
-4. **The tenant app.** A QTI-shaped grading app without XML import at first.
-5. **Expected traffic for the QTI app.** Peak submissions per second at the end of an exam would set the first real target.
-6. **The throughput target.** We restate "within 2× of Axum and Go" after M1.
-7. **HTTP server and Postgres client.** The M1 spikes decide.
-8. **Other databases in 0.1.** Postgres only, with the dialect interface designed in M3 so the others can follow.
-9. **SQLite binding.** leansqlite, which the Lean FRO maintains under Apache 2.0, unless M10 finds a reason to write our own.
-10. **Memory in CI.** Tests report each route's measured memory against its bound. CI doesn't fail on it until M4 has calibrated the model.
-11. **Package names.** The table under Scope is a proposal.
+2. **Dates and contributors.** Outcome milestones without dates.
+3. **The throughput target.** We restate "within 2× of Axum and Go" after M1.
+4. **HTTP server and Postgres client.** The M1 spikes decide.
+5. **SQLite binding.** leansqlite, which the Lean FRO maintains under Apache 2.0, unless M11 finds a reason to write our own.
+6. **Memory in CI.** Tests report each route's measured memory against its bound. CI doesn't fail on it until M4 has calibrated the model.
+7. **Package names.** The table under Scope is a proposal.
