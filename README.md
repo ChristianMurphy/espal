@@ -1,4 +1,9 @@
-# Espal
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/espal-lockup-on-dark.svg">
+    <img alt="Espal" src="docs/brand/espal-lockup-on-light.svg" width="300">
+  </picture>
+</h1>
 
 Espal is a web framework for Lean 4. You declare routes, inputs and results in a few lines, and the compiler checks how the app will behave under load.
 
