@@ -433,7 +433,7 @@ Here we pick the HTTP layer, the Postgres client and the libraries we keep. We a
   - Both recovered on their own when Postgres killed their connections or restarted, in about 0.1 and 2.3 seconds, with no hung requests.
   - The libpq server links 24 shared libraries at run time, among them OpenSSL, Kerberos and LDAP.
 - **Dependency spikes.** We build each candidate on Espal's toolchain, measure it against what Espal needs, and write down whether we keep or replace it. The candidates pin Lean versions from 4.33 to 4.35 today.
-  - lean-linq (MIT) as the query layer. It uses the representation we chose for the core, and it has budgets in `do` notation and drivers for four databases. Its MySQL driver links libmysqlclient, which Espal would swap for MariaDB Connector/C.
+  - lean-linq (MIT) as the query layer (done). Espal builds on its core with its own Postgres client, and sends changes upstream first. It passed its tests on Lean 4.35.0 and 4.36.0-rc1, and its budgets close most gaps in the [statement budget](#statement-budget). A module can't import it yet, its warnings fail `--wfail`, and its build needs all four client libraries. Moving its MySQL driver to MariaDB Connector/C took four changed lines. The [decision note](docs/design/lean-linq.md) lists what has to change upstream.
   - lean-routing (Apache 2.0) as the router. It derives handler types from route patterns and proves that patterns round-trip. It tests the link round trip, which Espal's own codec proves.
   - LeanIO (MIT) for typed extractors, streamed multipart uploads, ranges and ETags. It has almost no proofs and uses `partial def`, so it would sit outside the totality lint, and the route report would say so.
   - cedar-lean (Apache 2.0) as the permission engine, with the proofs described under [every endpoint checks permission](#every-endpoint-checks-permission).
@@ -457,7 +457,7 @@ Here we pick the HTTP layer, the Postgres client and the libraries we keep. We a
 
 ### Query layer, models and Postgres
 
-- The query core, with table variables that the interpreter supplies. It comes from lean-linq if the spikes keep it, and from our own code otherwise. Models declared with an attribute, the builder, and query syntax in `do` notation sit on top.
+- The query core from [lean-linq](docs/design/lean-linq.md), with table variables that the interpreter supplies. Models declared with an attribute, the builder, and query syntax in `do` notation sit on top.
 - Statement budgets with upper bounds and `do` notation. The proofs for [injection](#no-sql-injection), [tenant isolation](#tenant-isolation), [statement budgets](#statement-budget) and [row bounds](#row-bounds-and-query-cost) carry over, with batch lookups through `= ANY($1)`.
 - Collections and safe writes from the defaults.
 - The libpq client behind Espal's own client interface, with pipelining, transactions, prepared statements, and single-row mode for streamed results. Its pool waits for a reconnecting connection, where the spike's pool failed requests at once.
@@ -610,6 +610,7 @@ These came out of the planning discussion in October 2026.
 - **Route report.** One per route, with named escape hatches and a strict profile.
 - **Contracts.** One prototype with `vcgen` in the query layer milestone before committing.
 - **Candidate dependencies.** lean-linq, lean-routing, LeanIO and cedar-lean, each evaluated during the spikes.
+- **Query core.** lean-linq's core, run by Espal's own Postgres client. Changes go upstream first, and a copy with its MIT notice is the fallback.
 - **Tenant app.** A QTI-shaped grading app, without XML import at first.
 - **Load target.** 100,000 submissions within one minute at the end of an exam.
 - **Databases in 0.1.** Postgres only.

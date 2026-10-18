@@ -240,19 +240,19 @@ These differences call for a portable core plus dialect features that the type c
 - **leansqlite** (Apache 2.0, Lean FRO). A maintained SQLite binding.
 - **lean-postgres** (Apache 2.0). Postgres syntax and type rules embedded in Lean.
 
-Espal now prefers to depend on existing libraries. So the [spikes milestone](../../ROADMAP.md#spikes-and-a-baseline) tries lean-linq as the query layer before we build our own. lean-linq already solves several problems the prototype hit. It has `do` notation for budgets, it tracks which columns can be null, and it tests its SQL on real databases.
+Espal now prefers to depend on existing libraries. So the [spikes milestone](../../ROADMAP.md#spikes-and-a-baseline) tried lean-linq as the query layer, and Espal [builds on its core](lean-linq.md). lean-linq already solves several problems the prototype hit. It has `do` notation for budgets, it tracks which columns can be null, and it tests its SQL on real databases.
 
 ## Decisions so far
 
 - Build models and the builder first, and add embedded syntax after them.
 - Declare models with an attribute on an ordinary structure, as chrisflav/db does, instead of a custom command.
 - Use query syntax in `do` notation, on a core whose table variables the interpreter supplies.
-- Evaluate lean-linq as the query layer during the [spikes](../../ROADMAP.md#spikes-and-a-baseline), and build Espal's own core only if it doesn't fit.
+- Build the query layer on lean-linq's core, sending changes upstream first, as the [lean-linq note](lean-linq.md) records.
 - Reach MySQL and MariaDB through MariaDB Connector/C and SQL Server through FreeTDS. Both are LGPL, and Espal links them as shared libraries.
 
 ## Recommendation
 
-1. Build the core on the representation from the `do` prototype, where the interpreter supplies the type of table variables. If the spikes keep lean-linq, build it there. Port the builder and models to it. That removes the three-table limit and the second tree, and it keeps table variables inside their query. Port the injection proof first, to find out early what the proofs cost on this representation.
+1. Build the core on the representation from the `do` prototype, where the interpreter supplies the type of table variables. That core comes from [lean-linq](lean-linq.md). Port the builder and models to it. That removes the three-table limit and the second tree, and it keeps table variables inside their query. Port the injection proof first, to find out early what the proofs cost on this representation.
 2. Make `do` notation the embedded syntax, for its error positions and its plain `if` for optional filters. Keep the keyword flavor as a possible later layer on the same core.
 3. Give statement budgets `do` notation and upper bounds before 0.1. The prototype showed that chained `.bind` and exact counts both get in the way.
 4. Write custom error messages for type mismatches, stray table variables and N+1 loops, with a `#guard_msgs` test for each.
