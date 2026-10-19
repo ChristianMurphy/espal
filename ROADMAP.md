@@ -523,7 +523,7 @@ None of these block 0.1.
 
 - [Time and space cost of pure code](#time-and-space-cost-of-pure-code).
 - Our own HTTP/1.1 server on Std.Async. The HTTP spike found room for up to six times Std.Http's throughput on the same runtime.
-- Upstream fixes to Std.Http and Std.Async, such as fewer thread handoffs per request (lean4#13469). C bindings also need a way to wait on a socket inside the event loop. We [asked about it on Zulip](https://leanprover.zulipchat.com/#narrow/channel/270676-lean4/topic/Waiting.20on.20a.20C.20library.27s.20socket.20in.20Std.2EAsync/with/632829791), and a [draft RFC](https://github.com/ChristianMurphy/espal/blob/explore/postgres/explorations/postgres/lean-rfc-socket-wait.md) waits for the replies.
+- Upstream fixes to Std.Http and Std.Async, such as fewer thread handoffs per request (lean4#13469). C bindings also need a way to wait on a socket inside the event loop. After a [question on Zulip](https://leanprover.zulipchat.com/#narrow/channel/270676-lean4/topic/Waiting.20on.20a.20C.20library.27s.20socket.20in.20Std.2EAsync/with/632829791), [lean4#15769](https://github.com/leanprover/lean4/issues/15769) proposes a way to do that.
 - A Postgres client in pure Lean, grown from the spike's wire client, once Lean has TLS and a faster event loop.
 - A proof of the [job claim protocol](#background-jobs-run-at-least-once) in Veil.
 - MessagePack, after the [streaming decoders](#streaming-decoders-agree-with-whole-body-decoders) for JSON.
