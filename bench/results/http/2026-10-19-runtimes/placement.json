@@ -1,0 +1,38 @@
+[
+ {
+  "runtime": "std-http-small-4.36.0-rc1",
+  "path": "/plaintext",
+  "cpus 0,1": 4490.350362923841,
+  "cpus 0": 5179.995788145624
+ },
+ {
+  "runtime": "node-http",
+  "path": "/plaintext",
+  "cpus 0,1": 31176.213372649894,
+  "cpus 0": 34323.0308830318
+ },
+ {
+  "runtime": "ruby-puma",
+  "path": "/plaintext",
+  "cpus 0,1": 6449.860812753295,
+  "cpus 0": 13077.792608687876
+ },
+ {
+  "runtime": "rails-puma",
+  "path": "/plaintext",
+  "cpus 0,1": 964.0335120560233,
+  "cpus 0": 2224.95344224456
+ },
+ {
+  "runtime": "flask-gunicorn",
+  "path": "/plaintext",
+  "cpus 0,1": 1542.060691105142,
+  "cpus 0": 2837.817852166374
+ },
+ {
+  "runtime": "fastapi-uvicorn",
+  "path": "/plaintext",
+  "cpus 0,1": 6646.001404696889,
+  "cpus 0": 5970.391092448513
+ }
+]

@@ -1,0 +1,314 @@
+[
+ {
+  "runtime": "std-http-small-4.36.0-rc1",
+  "setup": "one process, CPUs 0-1",
+  "path": "/plaintext",
+  "peak_rps": 4297.437373792899,
+  "p99_ms_at_70": [
+   13.549115,
+   29.709022,
+   274.250404
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "std-http-small-4.36.0-rc1",
+  "setup": "one process, CPUs 0-1",
+  "path": "/json",
+  "peak_rps": 3283.942138443482,
+  "p99_ms_at_70": [
+   9.474817999999999,
+   12.908196,
+   49.242857
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "std-http-small-4.36.0-rc1",
+  "setup": "two processes behind haproxy",
+  "path": "/plaintext",
+  "peak_rps": 8611.561111259396,
+  "p99_ms_at_70": [
+   8.90755,
+   15.176301,
+   49.655309
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "std-http-small-4.36.0-rc1",
+  "setup": "two processes behind haproxy",
+  "path": "/json",
+  "peak_rps": 10988.946828575625,
+  "p99_ms_at_70": [
+   7.980030000000001,
+   13.464958000000001,
+   19.35634
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "node-http",
+  "setup": "one process, CPUs 0-1",
+  "path": "/plaintext",
+  "peak_rps": 42398.05380953588,
+  "p99_ms_at_70": [
+   4.706637,
+   6.385601,
+   8.456712
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "node-http",
+  "setup": "one process, CPUs 0-1",
+  "path": "/json",
+  "peak_rps": 44772.65626388681,
+  "p99_ms_at_70": [
+   7.809131000000001,
+   36.629166999999995,
+   56.989977999999994
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "node-http",
+  "setup": "two processes behind haproxy",
+  "path": "/plaintext",
+  "peak_rps": 54769.63294678103,
+  "p99_ms_at_70": [
+   10.337406,
+   28.461627,
+   50.039479
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "node-http",
+  "setup": "two processes behind haproxy",
+  "path": "/json",
+  "peak_rps": 56761.233751607855,
+  "p99_ms_at_70": [
+   32.856795,
+   72.310264,
+   112.666448
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "ruby-puma",
+  "setup": "one process, CPUs 0-1",
+  "path": "/plaintext",
+  "peak_rps": 10410.358008516887,
+  "p99_ms_at_70": [
+   9.546861999999999,
+   25.350194,
+   54.670429
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "ruby-puma",
+  "setup": "one process, CPUs 0-1",
+  "path": "/json",
+  "peak_rps": 10767.511857856383,
+  "p99_ms_at_70": [
+   27.545689000000003,
+   48.665468000000004,
+   71.14907199999999
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "ruby-puma",
+  "setup": "two processes behind haproxy",
+  "path": "/plaintext",
+  "peak_rps": 37594.25792636055,
+  "p99_ms_at_70": [
+   66.359186,
+   79.92290200000001,
+   91.897107
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "ruby-puma",
+  "setup": "two processes behind haproxy",
+  "path": "/json",
+  "peak_rps": 33313.11589903778,
+  "p99_ms_at_70": [
+   9.450754,
+   26.905382,
+   33.389824999999995
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "rails-puma",
+  "setup": "one process, CPUs 0-1",
+  "path": "/plaintext",
+  "peak_rps": 1044.628670865064,
+  "p99_ms_at_70": [
+   6.762772,
+   7.260795,
+   22.476618000000002
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "rails-puma",
+  "setup": "one process, CPUs 0-1",
+  "path": "/json",
+  "peak_rps": 1134.9514773978935,
+  "p99_ms_at_70": [
+   10.124322999999999,
+   34.995371999999996,
+   41.61596
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "rails-puma",
+  "setup": "two processes behind haproxy",
+  "path": "/plaintext",
+  "peak_rps": 5339.117715164357,
+  "p99_ms_at_70": [
+   74.061269,
+   74.923227,
+   103.226713
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "rails-puma",
+  "setup": "two processes behind haproxy",
+  "path": "/json",
+  "peak_rps": 4597.350304008145,
+  "p99_ms_at_70": [
+   46.968915,
+   56.626732,
+   127.33504500000001
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "flask-gunicorn",
+  "setup": "one process, CPUs 0-1",
+  "path": "/plaintext",
+  "peak_rps": 1780.658663562283,
+  "p99_ms_at_70": [
+   4.516044,
+   6.5425580000000005,
+   13.836514
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "flask-gunicorn",
+  "setup": "one process, CPUs 0-1",
+  "path": "/json",
+  "peak_rps": 1698.8096417348527,
+  "p99_ms_at_70": [
+   4.404171,
+   7.15144,
+   8.306821000000001
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "flask-gunicorn",
+  "setup": "two processes behind haproxy",
+  "path": "/plaintext",
+  "peak_rps": 8950.094449375438,
+  "p99_ms_at_70": [
+   69.596289,
+   75.392776,
+   125.14839699999999
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "flask-gunicorn",
+  "setup": "two processes behind haproxy",
+  "path": "/json",
+  "peak_rps": 8610.609225952341,
+  "p99_ms_at_70": [
+   67.640055,
+   67.692471,
+   105.748197
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "go-net-http",
+  "setup": "one process, CPUs 0-1",
+  "path": "/plaintext",
+  "peak_rps": 86249.26422140417,
+  "p99_ms_at_70": [
+   10.947374,
+   11.405762,
+   17.009783
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "go-net-http",
+  "setup": "one process, CPUs 0-1",
+  "path": "/json",
+  "peak_rps": 82982.06225221284,
+  "p99_ms_at_70": [
+   9.40112,
+   11.264651,
+   15.835947999999998
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "fastapi-uvicorn",
+  "setup": "one process, CPUs 0-1",
+  "path": "/plaintext",
+  "peak_rps": 6729.353721539689,
+  "p99_ms_at_70": [
+   9.240734,
+   53.037016,
+   84.454274
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "fastapi-uvicorn",
+  "setup": "one process, CPUs 0-1",
+  "path": "/json",
+  "peak_rps": 5674.404121624964,
+  "p99_ms_at_70": [
+   4.996124,
+   24.673296,
+   31.584464999999998
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "fastapi-uvicorn",
+  "setup": "two processes behind haproxy",
+  "path": "/plaintext",
+  "peak_rps": 14112.564165343198,
+  "p99_ms_at_70": [
+   5.087311,
+   15.540951000000002,
+   180.974887
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "fastapi-uvicorn",
+  "setup": "two processes behind haproxy",
+  "path": "/json",
+  "peak_rps": 11746.71861201563,
+  "p99_ms_at_70": [
+   7.777814,
+   25.079286999999997,
+   35.788238
+  ],
+  "non200_at_70": 0
+ }
+]
