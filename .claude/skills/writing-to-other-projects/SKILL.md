@@ -14,6 +14,7 @@ description: Draft issues, pull requests and forum posts for projects other than
 - Offer help in concrete terms, such as opening the pull request and seeing it through review.
 - Leave out what the reader doesn't need to decide. Keep to the problem, the proposal and the alternatives, with one small table at most, and link the full results. Mention a prototype only when it supports an option.
 - A short example or a link to the docs often explains more than another paragraph.
+- Split a pull request longer than a few paragraphs into short sections, such as how it works, guarantees, performance and notes. Keep each bullet to one or two sentences.
 - Where you're new, ask before proposing. Lean's RFC template asks for a Zulip thread first. Keep a first post short, and skip @-mentions.
 
 ## Handing it over
