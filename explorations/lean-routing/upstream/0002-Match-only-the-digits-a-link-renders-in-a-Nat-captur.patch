@@ -1,4 +1,4 @@
-From 49db1bf040135f0f80445dbdc5fde287d0243b80 Mon Sep 17 00:00:00 2001
+From c7bde6460d015c863804f51ca3e124a976465943 Mon Sep 17 00:00:00 2001
 From: Christian Murphy <christian.murphy.42@gmail.com>
 Date: Mon, 19 Oct 2026 02:53:03 +0000
 Subject: [PATCH] Match only the digits a link renders in a Nat capture
@@ -75,7 +75,7 @@ index 490700b..ceea8ef 100644
  #guard dispatch userPattern userHandler ["users"] = none                -- too few path segments
  #guard dispatch userPattern userHandler ["users", "42", "extra"] = none -- too many path segments
 diff --git a/test/RoutingTests/RoundTrip.lean b/test/RoutingTests/RoundTrip.lean
-index 49996bc..ecc626c 100644
+index 0fedf4c..713e839 100644
 --- a/test/RoutingTests/RoundTrip.lean
 +++ b/test/RoutingTests/RoundTrip.lean
 @@ -9,6 +9,20 @@ import Std.Data.String.ToNat
@@ -99,7 +99,7 @@ index 49996bc..ecc626c 100644
  /-- One value per capture in `segs`, in order. -/
  def Args : List PathSeg → Type
    | [] => Unit
-@@ -49,7 +63,7 @@ theorem dispatch_pathOf : ∀ (segs : List PathSeg) (h : HandlerType segs r) (ar
+@@ -50,7 +64,7 @@ theorem dispatch_pathOf : ∀ (segs : List PathSeg) (h : HandlerType segs r) (ar
      simp only [pathOf, dispatch, BEq.rfl, ite_true, applyHandler]
      exact dispatch_pathOf rest h args hl
    | .capture _ .nat :: rest, h, (n, args), hl => by

@@ -1,4 +1,4 @@
-From 90cf27bbee98b7977c0b6c0aa0d3d79281094b1d Mon Sep 17 00:00:00 2001
+From a1dff8ff9e375f7e112421c42c472e5fb239bfad Mon Sep 17 00:00:00 2001
 From: Christian Murphy <christian.murphy.42@gmail.com>
 Date: Mon, 19 Oct 2026 02:52:30 +0000
 Subject: [PATCH] Prove the link round trip down to segments
@@ -9,9 +9,9 @@ Signed-off-by: Christian Murphy <christian.murphy.42@gmail.com>
 ---
  README.md                        |  3 +-
  test/RoutingTests.lean           |  1 +
- test/RoutingTests/Handler.lean   | 11 ++---
- test/RoutingTests/RoundTrip.lean | 83 ++++++++++++++++++++++++++++++++
- 4 files changed, 89 insertions(+), 9 deletions(-)
+ test/RoutingTests/Handler.lean   | 11 ++--
+ test/RoutingTests/RoundTrip.lean | 87 ++++++++++++++++++++++++++++++++
+ 4 files changed, 93 insertions(+), 9 deletions(-)
  create mode 100644 test/RoutingTests/RoundTrip.lean
 
 diff --git a/README.md b/README.md
@@ -71,10 +71,10 @@ index bc4cdb4..490700b 100644
  #guard linkFor [.lit "todos", .capture "id" .nat] 42 = "/todos/42"
 diff --git a/test/RoutingTests/RoundTrip.lean b/test/RoutingTests/RoundTrip.lean
 new file mode 100644
-index 0000000..49996bc
+index 0000000..0fedf4c
 --- /dev/null
 +++ b/test/RoutingTests/RoundTrip.lean
-@@ -0,0 +1,83 @@
+@@ -0,0 +1,87 @@
 +/-
 +Copyright (c) 2026 Paul Butcher. All rights reserved.
 +Released under Apache 2.0 license as described in the file LICENSE.
@@ -111,6 +111,7 @@ index 0000000..49996bc
 +  | .capture _ .nat :: rest, (n, args) => toString n :: pathOf rest args
 +  | .capture _ .string :: rest, (s, args) => s :: pathOf rest args
 +
++/-- Every `String` capture in `args` is one a link can carry. -/
 +def Linkable : (segs : List PathSeg) → Args segs → Prop
 +  | [], _ => True
 +  | .lit _ _ :: rest, args => Linkable rest args
@@ -141,7 +142,8 @@ index 0000000..49996bc
 +  | .capture _ .string :: rest, (s, args) =>
 +    toString (Std.Http.URI.EncodedSegment.encode s) :: encodedPathOf rest args
 +
-+theorem applyLink_linkParts : ∀ (segs : List PathSeg) (parts : List String) (args : Args segs),
++private theorem applyLink_linkParts :
++    ∀ (segs : List PathSeg) (parts : List String) (args : Args segs),
 +    applyLink segs (linkParts segs parts) args =
 +      "/" ++ String.intercalate "/" (parts ++ encodedPathOf segs args)
 +  | [], parts, _ => by simp [applyLink, linkParts, encodedPathOf]
@@ -152,9 +154,11 @@ index 0000000..49996bc
 +  | .capture _ .string :: rest, parts, (s, args) =>
 +    (applyLink_linkParts rest _ args).trans (by simp [encodedPathOf])
 +
-+/-- A route's link is `"/"` followed by `encodedPathOf`, joined with `"/"`. -/
++/-- The link `linkFor` builds is `pathOf`'s segments, encoded, so `dispatch_pathOf` covers it up to
++`Std.Http`'s decoding. -/
 +theorem applyLink_linkFor (segs : List PathSeg) (args : Args segs) :
-+    applyLink segs (linkFor segs) args = "/" ++ String.intercalate "/" (encodedPathOf segs args) := by
++    applyLink segs (linkFor segs) args =
++      "/" ++ String.intercalate "/" (encodedPathOf segs args) := by
 +  simpa [linkFor] using applyLink_linkParts segs [] args
 +
 +end Routing
