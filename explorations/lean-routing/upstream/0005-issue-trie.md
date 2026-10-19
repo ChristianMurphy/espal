@@ -1,6 +1,6 @@
 Dispatch compares a request with each route in turn until one matches, so the cost grows with the route table. A request that matches no route goes through every route twice. The second pass is `respond?` checking whether a trailing slash would match, for a redirect. With 1,000 routes, a request for the last one takes about 15 µs, or 21 µs when every route starts with `/api`.
 
-A segment trie built once in `toHandler` and `Router.toHandler` would bring that to about 0.5 µs at any size, and about 0.1 µs for a 404. It finds the same route `matchTable` finds and runs it with `Route.tryDispatch`, so the API and the results stay the same.
+A segment [trie](https://en.wikipedia.org/wiki/Trie) built once in `toHandler` and `Router.toHandler` would bring that to about 0.5 µs at any size, and about 0.1 µs for a 404. It finds the same route `matchTable` finds and runs it with `Route.tryDispatch`, so the API and the results stay the same. Go's httprouter [explains a routing tree](https://github.com/julienschmidt/httprouter#how-does-it-work) built on the same idea.
 
 If a trie is more code than you want to maintain, two smaller changes would also help. An index on the first segment is about half the code, and slightly faster than the trie when routes start with different literals. Routes that share a first segment still get compared one by one. So it doesn't help when every route starts with `/api`, or in an app built from mounts.
 
