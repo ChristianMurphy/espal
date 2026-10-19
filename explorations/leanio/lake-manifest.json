@@ -1,0 +1,14 @@
+{"version": "1.3.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"type": "path",
+   "scope": "",
+   "name": "leanio",
+   "manifestFile": "lake-manifest.json",
+   "inherited": false,
+   "dir": "leanio",
+   "copy": false,
+   "configFile": "lakefile.toml"}],
+ "name": "«leanio-trial»",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}
