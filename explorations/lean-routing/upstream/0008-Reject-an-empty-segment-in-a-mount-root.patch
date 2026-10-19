@@ -1,0 +1,168 @@
+From 2f191c1966e140a45e96652ecc7924725670c785 Mon Sep 17 00:00:00 2001
+From: Christian Murphy <christian.murphy.42@gmail.com>
+Date: Mon, 19 Oct 2026 20:45:37 +0000
+Subject: [PATCH] Reject an empty segment in a mount root
+
+A MountPoint could start with an empty segment, and every link under it then started with //, which a browser reads as another host. MountPoint now refuses the segments that unlinkable names, as a String capture does. MountPoint.ofSegs? returns none for an empty segment, and a literal root with one fails to compile. unlinkable moves next to dotSegment in Pattern.lean.
+
+This changes behaviour for code that builds such a root, which now gets none or a compile error.
+
+Signed-off-by: Christian Murphy <christian.murphy.42@gmail.com>
+---
+ CHANGELOG.md                  |  4 ++++
+ README.md                     |  4 ++--
+ Routing/Handler.lean          |  5 -----
+ Routing/Pattern.lean          | 22 ++++++++++++++++------
+ Routing/Router.lean           |  2 +-
+ test/RoutingTests/Router.lean | 16 +++++++++++++++-
+ 6 files changed, 38 insertions(+), 15 deletions(-)
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index dfeec3d..4b381d5 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,9 @@
+ # Changelog
+ 
++## [Unreleased]
++
++- A `MountPoint` can no longer hold an empty segment, which gave links starting with `//` that name another host; `MountPoint.ofSegs?` returns `none` for one.
++
+ ## [0.10.1] - 2026-10-18
+ 
+ - Chore: bump dependencies.
+diff --git a/README.md b/README.md
+index 3f8905d..f757c56 100644
+--- a/README.md
++++ b/README.md
+@@ -126,7 +126,7 @@ def site : Router :=
+ def app : StatelessHandler := site.toHandler
+ ```
+ 
+-A mount takes every request under its root, and its entries are written against the mounted table's own unprefixed `patterns`. Its root is a table's `patterns` value, which records where that table is mounted (`AppName.patterns.blog.mountedAt.segs = ["blog"]`, and `AppName.links.blog.mountedAt = "/blog"`), or a `MountPoint` no table describes. Like a pattern, a root cannot hold a `.` or `..` segment: a literal one such as `.mk ["admin"]` is checked at compile time, and one built at run time comes from `MountPoint.ofSegs? ["t", tenant]`, which returns `none` for an invalid segment. Mounts nest, each root prefixed by those enclosing it.
++A mount takes every request under its root, and its entries are written against the mounted table's own unprefixed `patterns`. Its root is a table's `patterns` value, which records where that table is mounted (`AppName.patterns.blog.mountedAt.segs = ["blog"]`, and `AppName.links.blog.mountedAt = "/blog"`), or a `MountPoint` no table describes. A root cannot hold an empty, `.` or `..` segment, since an empty first segment would start its links with `//`. A literal root such as `.mk ["admin"]` is checked at compile time, and one built at run time comes from `MountPoint.ofSegs? ["t", tenant]`, which returns `none` for an invalid segment. Mounts nest, each root prefixed by those enclosing it.
+ 
+ A router serves a request with its first route that matches, else its first sub-router that takes it, else its `fallback` (a plain `404 Not Found` by default). A router takes a request if one of its routes matches it or one of its mounts or sub-routers takes it, so a miss under `/blog` above gets `blogNotFound`, behind `requireToken`. `matchedRoute?` reports the full pattern, mount roots included, whichever router served the request. As with `toHandler`, a mounted index requested without its slash gets a `308`.
+ 
+@@ -172,7 +172,7 @@ Linking to a strict descendant of the current page needs its own segment repeate
+ - Template stability ([test/RoutingTests/Pattern.lean](test/RoutingTests/Pattern.lean), `renderTemplate_kind_invariant`): changing a capture's kind leaves the endpoint template that `matchedPattern?` reports unchanged, so telemetry grouped by route survives `:id:Nat` becoming `:id:String`.
+ - Router mounts ([test/RoutingTests/Router.lean](test/RoutingTests/Router.lean), `Route.under_segs`): a route under a `Router` mount has exactly the pattern a `route_table` mount gives it, so it matches what the table's links point at.
+ - Mount-prefix cancellation ([test/RoutingTests/RelativeLink.lean](test/RoutingTests/RelativeLink.lean), `relativeSegments_prefix`): a prefix shared by both endpoints drops out of a relative link, so a module's self-links are the same wherever it is mounted.
+-- By construction: a handler's type is computed from its pattern, so a wrong-arity or wrong-type handler fails to compile, and `PathSeg.lit` and `MountPoint` take a proof that no segment is `.` or `..`. The `#guard_msgs` tests in [test/RoutingTests/](test/RoutingTests/) pin these, along with the compile-time rejection of malformed patterns, duplicate route names and captured mount prefixes.
++- By construction: a handler's type is computed from its pattern, so a wrong-arity or wrong-type handler fails to compile. `PathSeg.lit` takes a proof that its segment is not `.` or `..`, and `MountPoint` one that no segment is empty, `.` or `..`. The `#guard_msgs` tests in [test/RoutingTests/](test/RoutingTests/) pin these, along with the compile-time rejection of malformed patterns, duplicate route names and captured mount prefixes.
+ 
+ ## Conformance tests
+ 
+diff --git a/Routing/Handler.lean b/Routing/Handler.lean
+index 07785e6..d3af102 100644
+--- a/Routing/Handler.lean
++++ b/Routing/Handler.lean
+@@ -21,11 +21,6 @@ def HandlerType (segs : List PathSeg) (result : Type) : Type :=
+   | .lit _ _ :: rest => HandlerType rest result
+   | .capture _ kind :: rest => kind.type → HandlerType rest result
+ 
+-/-- The `String` captures no link can carry as one path segment: a `dotSegment`, or an empty one,
+-which many proxies collapse and which, as the last segment, cannot be told from a trailing slash. -/
+-def unlinkable (s : String) : Bool :=
+-  s == "" || dotSegment s
+-
+ /-- Matches a decoded request path (`List String`, e.g. from
+ `RequestTarget.path.toDecodedSegments`) against `segs`, applying `handler`
+ to the extracted, typed capture values as it goes.
+diff --git a/Routing/Pattern.lean b/Routing/Pattern.lean
+index 44369c4..792b383 100644
+--- a/Routing/Pattern.lean
++++ b/Routing/Pattern.lean
+@@ -33,6 +33,12 @@ so no link can reach a route containing one. -/
+ def dotSegment (s : String) : Bool :=
+   s == "." || s == ".."
+ 
++/-- A `dotSegment` or an empty segment, which no link can carry. Many proxies collapse an empty one.
++As the last segment it cannot be told from a trailing slash, and as the first it starts the link
++with `//`, which names another host. -/
++def unlinkable (s : String) : Bool :=
++  s == "" || dotSegment s
++
+ /-- One segment of a route path pattern: a literal segment to match
+ verbatim, or a named, typed capture. -/
+ inductive PathSeg where
+@@ -162,16 +168,20 @@ def mountSegs : List PathSeg → List PathSeg → List PathSeg
+   | pre, [] => pre ++ [.lit ""]
+   | pre, segs => pre ++ segs
+ 
+-/-- The literal path prefix a `Router` mount serves, decoded, as a request path is. Like
+-`PathSeg.lit`, it takes a proof that no segment is a `dotSegment`, since no request could reach
+-one. -/
++/-- The literal path prefix a `Router` mount serves, decoded, as a request path is. It takes a
++proof that no segment is `unlinkable`, since every link under the mount carries them all. -/
+ structure MountPoint where
+   segs : List String
+-  valid : segs.all (!dotSegment ·) := by decide
++  valid : segs.all (!unlinkable ·) := by decide
+ 
+-/-- A mount point at `segs`, unless one of them is a `dotSegment`. -/
++/-- A mount point at `segs`, unless one of them is `unlinkable`. -/
+ def MountPoint.ofSegs? (segs : List String) : Option MountPoint :=
+-  if h : segs.all (!dotSegment ·) then some ⟨segs, h⟩ else none
++  if h : segs.all (!unlinkable ·) then some ⟨segs, h⟩ else none
++
++theorem MountPoint.noDotSegments (root : MountPoint) : root.segs.all (!dotSegment ·) :=
++  List.all_eq_true.2 fun s hs => by
++    have := List.all_eq_true.1 root.valid s hs
++    simp_all [unlinkable]
+ 
+ /-- `inner` mounted under `outer`. -/
+ def MountPoint.append (outer inner : MountPoint) : MountPoint :=
+diff --git a/Routing/Router.lean b/Routing/Router.lean
+index b9200e9..690e3c2 100644
+--- a/Routing/Router.lean
++++ b/Routing/Router.lean
+@@ -50,7 +50,7 @@ def Route.asDirectory : Route result → Route result
+ 
+ /-- `r` under `root`, with the segments `mountSegs` gives. -/
+ def Route.under (root : MountPoint) (r : Route result) : Route result :=
+-  if root.segs.isEmpty then r else Route.prependLits root.segs root.valid r.asDirectory
++  if root.segs.isEmpty then r else Route.prependLits root.segs root.noDotSegments r.asDirectory
+ 
+ mutual
+ /-- The routes an entry serves, in order, each with the full pattern of every mount enclosing it. -/
+diff --git a/test/RoutingTests/Router.lean b/test/RoutingTests/Router.lean
+index 68a9a67..eaa2a1a 100644
+--- a/test/RoutingTests/Router.lean
++++ b/test/RoutingTests/Router.lean
+@@ -107,17 +107,31 @@ private def tenantRouter : Router :=
+       (MountPoint.ofSegs? ["t", tenant]).map fun root => .mount root [ .get [] (ok tenant) ] }
+ 
+ #guard (MountPoint.ofSegs? ["t", ".."]).isNone
++-- A root starting with an empty segment would give links starting with `//`, to another host.
++#guard (MountPoint.ofSegs? [""]).isNone
++#guard (MountPoint.ofSegs? ["", "admin"]).isNone
++#guard (MountPoint.ofSegs? ["t", ""]).isNone
+ 
+ /--
+ error: could not synthesize default value for field 'valid' of 'Routing.MountPoint' using tactics
+ ---
+ error: Tactic `decide` proved that the proposition
+-  (["t", ".."].all fun x => !dotSegment x) = true
++  (["t", ".."].all fun x => !unlinkable x) = true
+ is false
+ -/
+ #guard_msgs in
+ example : Entry := .mount { segs := ["t", ".."] } []
+ 
++/--
++error: could not synthesize default value for field 'valid' of 'Routing.MountPoint' using tactics
++---
++error: Tactic `decide` proved that the proposition
++  (["", "admin"].all fun x => !unlinkable x) = true
++is false
++-/
++#guard_msgs in
++example : Entry := .mount { segs := ["", "admin"] } []
++
+ private def siteRouter : Router :=
+   { middlewares := [tag "outer", tag "inner"]
+     routes :=
+-- 
+2.43.0
+

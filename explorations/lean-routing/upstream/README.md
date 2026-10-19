@@ -11,6 +11,7 @@ Each patch applies on commit `75d8bc3`, except `0002`, which applies on top of `
 | `0005` | An issue asking about matching routes with a trie, opened as [#8](https://github.com/paulbutcher/lean-routing/issues/8) | An issue, with a prototype | Nothing until a pull request lands |
 | `0006` | An issue about links to another host from a mount root that starts with an empty segment, opened as [#9](https://github.com/paulbutcher/lean-routing/issues/9) | An issue | Nothing until a fix lands |
 | `0007` | Match requests with a trie, for issue #8, described in `0007-description.md`, opened as [#11](https://github.com/paulbutcher/lean-routing/pull/11) | 92 lines of library code and 447 lines of proof | A lookup tries only the routes shaped like the request |
+| `0008` | Reject an empty segment in a mount root, for issue #9, described in `0008-description.md` | 38 lines added, 15 removed | Code that builds a root starting with `""` gets `none` or a compile error |
 
 ## How realistic each one is
 
@@ -21,6 +22,7 @@ Each patch applies on commit `75d8bc3`, except `0002`, which applies on top of `
 - **`0005`.** Dispatch costs about 15 ns per route, so it grows with the number of routes. A trie keeps the same results with no change to the API, and it stays near 0.5 µs whether or not routes share a prefix. It's a question rather than a patch, since the maintainer may prefer another structure.
 - **`0006`.** A browser sends a link that starts with `//` to another host. A test in Chromium confirmed it for links from `linkFor` and `mountLink`, and for the 308 redirect. Only a root or route built by hand can start with an empty segment, because `route_table` and `mount_routes` reject one.
 - **`0007`.** The maintainer's reply on #8 asks that a trie keep or improve the formal guarantees, and keep the code lean. `RouteIndex.matchTable_of` proves that the trie picks the route `matchTable` picks. The prototype behind #8 returned only the lowest-numbered route whose pattern matched, so it skipped a later route with the right method. Its check used `GET` routes only, which hid that. The trie in `0007` collects every candidate and lets `Route.tryMatch` decide. The [benchmark](../trie/results.md) checks mixed methods.
+- **`0008`.** It applies the check a `String` capture already uses to every mount-root segment. It merges with `0001` without conflicts, and with `0007` and `0002` it conflicts only in the changelog and next to `parseNat?`. A scratch merge of all four passed `lake test`.
 
 lean-routing has merged outside pull requests before. Val's [#1](https://github.com/paulbutcher/lean-routing/pull/1) moved it to Lean 4.34.1, and [#2](https://github.com/paulbutcher/lean-routing/pull/2) percent-encoded `String` captures in links.
 
