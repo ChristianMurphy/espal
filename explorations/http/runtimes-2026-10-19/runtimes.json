@@ -1,0 +1,170 @@
+[
+ {
+  "runtime": "std-http-small-4.36.0-rc1",
+  "setup": "one process, CPUs 0-1",
+  "path": "/plaintext",
+  "peak_rps": 4153.515253003871,
+  "p99_ms_at_70": [
+   7.724545,
+   10.611165,
+   11.647146000000001
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "std-http-small-4.36.0-rc1",
+  "setup": "one process, CPUs 0-1",
+  "path": "/json",
+  "peak_rps": 4181.300558883878,
+  "p99_ms_at_70": [
+   6.081319,
+   8.371918,
+   10.275641
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "std-http-small-4.36.0-rc1",
+  "setup": "two processes behind haproxy",
+  "path": "/plaintext",
+  "peak_rps": 12738.049002937392,
+  "p99_ms_at_70": [
+   23.739999,
+   34.43259,
+   75.507975
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "std-http-small-4.36.0-rc1",
+  "setup": "two processes behind haproxy",
+  "path": "/json",
+  "peak_rps": 12502.207838112407,
+  "p99_ms_at_70": [
+   12.089196999999999,
+   17.355247000000002,
+   17.467852999999998
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "node-http",
+  "setup": "one process, CPUs 0-1",
+  "path": "/plaintext",
+  "peak_rps": 43172.432481096526,
+  "p99_ms_at_70": [
+   24.054095,
+   78.168979,
+   290.943201
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "node-http",
+  "setup": "one process, CPUs 0-1",
+  "path": "/json",
+  "peak_rps": 38637.47822787339,
+  "p99_ms_at_70": [
+   4.612099,
+   4.9817350000000005,
+   11.379271
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "node-http",
+  "setup": "two processes behind haproxy",
+  "path": "/plaintext",
+  "peak_rps": 49736.84350025028,
+  "p99_ms_at_70": [
+   38.113103,
+   230.86019499999998,
+   236.52382
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "node-http",
+  "setup": "two processes behind haproxy",
+  "path": "/json",
+  "peak_rps": 48876.1520915318,
+  "p99_ms_at_70": [
+   29.81261,
+   35.306211,
+   58.321942
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "ruby-puma",
+  "setup": "one process, CPUs 0-1",
+  "path": "/plaintext",
+  "peak_rps": 10847.771608449884,
+  "p99_ms_at_70": [
+   31.45775,
+   49.94805,
+   238.793749
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "ruby-puma",
+  "setup": "one process, CPUs 0-1",
+  "path": "/json",
+  "peak_rps": 9590.944275222462,
+  "p99_ms_at_70": [
+   72.674043,
+   105.916389,
+   136.935525
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "ruby-puma",
+  "setup": "two processes behind haproxy",
+  "path": "/plaintext",
+  "peak_rps": 31216.533690636308,
+  "p99_ms_at_70": [
+   12.587612,
+   38.342206,
+   97.287947
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "ruby-puma",
+  "setup": "two processes behind haproxy",
+  "path": "/json",
+  "peak_rps": 37227.54748258083,
+  "p99_ms_at_70": [
+   58.214091,
+   73.768819,
+   158.462101
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "go-net-http",
+  "setup": "one process, CPUs 0-1",
+  "path": "/plaintext",
+  "peak_rps": 80307.60563826389,
+  "p99_ms_at_70": [
+   13.352022999999999,
+   15.792622999999999,
+   40.044273
+  ],
+  "non200_at_70": 0
+ },
+ {
+  "runtime": "go-net-http",
+  "setup": "one process, CPUs 0-1",
+  "path": "/json",
+  "peak_rps": 81276.2859931151,
+  "p99_ms_at_70": [
+   10.871314,
+   24.403679,
+   48.283667
+  ],
+  "non200_at_70": 0
+ }
+]
