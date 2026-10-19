@@ -22,4 +22,10 @@ This work starts when uploads arrive after 0.1.
 
 ## Changes offered upstream
 
-Espal reports each finding to LeanIO as its own issue, and doesn't wait on a fix. The trial's `MultipartSplit.lean` and `Trial/Behaviour.lean` reproduce them.
+Espal reported each finding to LeanIO as its own issue, and doesn't wait on a fix. The trial's `MultipartSplit.lean` and `Trial/Behaviour.lean` reproduce them.
+
+- [ecyrbe/leanio#33](https://github.com/ecyrbe/leanio/issues/33) covers the failed build from Lean 4.34.0 on, where Std.Http declares four of LeanIO's header names.
+- [ecyrbe/leanio#34](https://github.com/ecyrbe/leanio/issues/34) covers text fields and part headers that span two chunks.
+- [ecyrbe/leanio#35](https://github.com/ecyrbe/leanio/issues/35) covers the closing boundary that a file part takes in.
+- [ecyrbe/leanio#36](https://github.com/ecyrbe/leanio/issues/36) covers ranges past the end of a file, and invalid ranges.
+- [ecyrbe/leanio#37](https://github.com/ecyrbe/leanio/issues/37) covers lists and weak tags in `If-None-Match`, headers on a 304, and file tags that collide.
