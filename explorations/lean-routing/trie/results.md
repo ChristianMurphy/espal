@@ -1,6 +1,6 @@
 # Route trie benchmark
 
-`TrieBench.lean` times two ways for lean-routing to find a request's route. `matchTable`, the scan, tries each route in order. The trie that `toHandler` and `Router` build once over the table collects the routes that could match, then tries only those. It runs against commit `dab7840` on the fork's `route-trie` branch, on Lean 4.35.0.
+`TrieBench.lean` times two ways for lean-routing to find a request's route. `matchTable`, the scan, tries each route in order. The trie that `toHandler` and `Router` build once over the table collects the routes that could match, then tries only those. It runs against commit `dab7840` on the fork's `route-trie` branch, on Lean 4.35.0. The library code is the same at `e4fee14`, which only adds proofs.
 
 Before timing a table, it checks that both give the same answers for 30,000 lookups. Each lookup asks which route matches and whether one would with a trailing slash added. They cover `GET`, `POST` and `PUT`, trailing slashes and failed captures. A table holds each pattern, `/r<i>/:id:Nat` or `/api/r<i>/:id:Nat`, twice, for `POST` and then `GET`. So a table of 2,000 routes holds 1,000 patterns.
 

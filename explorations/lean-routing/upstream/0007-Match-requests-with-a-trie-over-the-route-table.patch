@@ -1,11 +1,11 @@
-From dab78409afbd5d3876067715a2f608305abd62ab Mon Sep 17 00:00:00 2001
+From e4fee14f0f8d1f355c9c45d532657343ebc069d2 Mon Sep 17 00:00:00 2001
 From: Christian Murphy <christian.murphy.42@gmail.com>
-Date: Mon, 19 Oct 2026 13:20:21 +0000
+Date: Mon, 19 Oct 2026 15:06:02 +0000
 Subject: [PATCH] Match requests with a trie over the route table
 
 Dispatch tried each route in turn, so its cost grew with the table. toHandler and Router.toHandler now build a segment trie once. One walk of it collects the routes that could match the path, or the path with a trailing slash added. Route.tryMatch then runs on those routes in table order, both for the match and for the slash redirect.
 
-RouteIndex.first_of and RouteIndex.wantsSlash_of prove that both answers equal what matchTable gives, for every table, method and path. The trie lives in Routing.Internal, and the public functions keep their signatures.
+RouteIndex.first_of and RouteIndex.wantsSlash_of prove that both answers equal what matchTable gives, for every table, method and path. RouteIndex.memory_of bounds the trie by one node per pattern segment, plus the root, with each route's index stored once. The trie lives in Routing.Internal, and the public functions keep their signatures.
 
 Signed-off-by: Christian Murphy <christian.murphy.42@gmail.com>
 ---
@@ -14,16 +14,16 @@ Signed-off-by: Christian Murphy <christian.murphy.42@gmail.com>
  Routing.lean                |   5 +-
  Routing/Route.lean          |   7 +-
  Routing/Router.lean         |   7 +-
- Routing/Server.lean         |  57 +++++--
- Routing/Trie.lean           |  92 +++++++++++
+ Routing/Server.lean         |  57 +++--
+ Routing/Trie.lean           |  92 ++++++++
  test/RoutingTests.lean      |   1 +
- test/RoutingTests/Trie.lean | 308 ++++++++++++++++++++++++++++++++++++
- 9 files changed, 458 insertions(+), 24 deletions(-)
+ test/RoutingTests/Trie.lean | 447 ++++++++++++++++++++++++++++++++++++
+ 9 files changed, 597 insertions(+), 24 deletions(-)
  create mode 100644 Routing/Trie.lean
  create mode 100644 test/RoutingTests/Trie.lean
 
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index dfeec3d..e94a53d 100644
+index dfeec3d..26e284a 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
 @@ -1,5 +1,9 @@
@@ -31,20 +31,20 @@ index dfeec3d..e94a53d 100644
  
 +## [Unreleased]
 +
-+- Find a request's route with a trie built once over the table, so matching no longer slows as a table grows.
++- Find a request's route with a trie built once over the table, so matching tries only the routes shaped like the request.
 +
  ## [0.10.1] - 2026-10-18
  
  - Chore: bump dependencies.
 diff --git a/README.md b/README.md
-index 3f8905d..19d2897 100644
+index 3f8905d..2792e2a 100644
 --- a/README.md
 +++ b/README.md
 @@ -171,6 +171,7 @@ Linking to a strict descendant of the current page needs its own segment repeate
  - Pattern round trip ([test/RoutingTests/Pattern.lean](test/RoutingTests/Pattern.lean), `parsePattern_renderPattern`): rendering a list of well-formed segments to a pattern string and parsing it back recovers exactly those segments.
  - Template stability ([test/RoutingTests/Pattern.lean](test/RoutingTests/Pattern.lean), `renderTemplate_kind_invariant`): changing a capture's kind leaves the endpoint template that `matchedPattern?` reports unchanged, so telemetry grouped by route survives `:id:Nat` becoming `:id:String`.
  - Router mounts ([test/RoutingTests/Router.lean](test/RoutingTests/Router.lean), `Route.under_segs`): a route under a `Router` mount has exactly the pattern a `route_table` mount gives it, so it matches what the table's links point at.
-+- Route trie ([test/RoutingTests/Trie.lean](test/RoutingTests/Trie.lean), `RouteIndex.first_of`, `RouteIndex.wantsSlash_of`): the trie that `toHandler` and `Router` build once over a table finds the route `matchTable` finds, and redirects to a trailing slash exactly when `wantsSlash` would, for every table, method and path.
++- Route trie ([test/RoutingTests/Trie.lean](test/RoutingTests/Trie.lean), `RouteIndex.first_of`, `RouteIndex.wantsSlash_of`, `RouteIndex.memory_of`): the trie that `toHandler` and `Router` build once over a table finds the route `matchTable` finds, for every table, method and path. It redirects to a trailing slash when `wantsSlash` would. It holds at most one node per pattern segment, plus the root, and each route's index once.
  - Mount-prefix cancellation ([test/RoutingTests/RelativeLink.lean](test/RoutingTests/RelativeLink.lean), `relativeSegments_prefix`): a prefix shared by both endpoints drops out of a relative link, so a module's self-links are the same wherever it is mounted.
  - By construction: a handler's type is computed from its pattern, so a wrong-arity or wrong-type handler fails to compile, and `PathSeg.lit` and `MountPoint` take a proof that no segment is `.` or `..`. The `#guard_msgs` tests in [test/RoutingTests/](test/RoutingTests/) pin these, along with the compile-time rejection of malformed patterns, duplicate route names and captured mount prefixes.
  
@@ -320,10 +320,10 @@ index 568760d..73d09d7 100644
 +import RoutingTests.Trie
 diff --git a/test/RoutingTests/Trie.lean b/test/RoutingTests/Trie.lean
 new file mode 100644
-index 0000000..fdfe3d0
+index 0000000..793ae8b
 --- /dev/null
 +++ b/test/RoutingTests/Trie.lean
-@@ -0,0 +1,308 @@
+@@ -0,0 +1,447 @@
 +/-
 +Copyright (c) 2026 Paul Butcher. All rights reserved.
 +Released under Apache 2.0 license as described in the file LICENSE.
@@ -630,6 +630,145 @@ index 0000000..fdfe3d0
 +        · simp_all
 +        · exact mem_candidates_of_fits routes hk hf
 +    rw [this]
++
++theorem Trie.edges_insert : ∀ (segs : List PathSeg) (t : Trie) (i node : Nat),
++    t.lits.size + t.captures.size + 1 = t.size →
++    (t.insert i node segs).lits.size + (t.insert i node segs).captures.size + 1 =
++      (t.insert i node segs).size
++  | [], _, _, _, h => h
++  | .lit s _ :: rest, t, i, node, h => by
++    simp only [Trie.insert]
++    split
++    · exact edges_insert rest t i _ h
++    · rename_i hnone
++      apply edges_insert rest
++      simp only [Std.HashMap.size_insert, Std.HashMap.mem_iff_isSome_getElem?, hnone,
++        Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
++      omega
++  | .capture _ _ :: rest, t, i, node, h => by
++    simp only [Trie.insert]
++    split
++    · exact edges_insert rest t i _ h
++    · rename_i hnone
++      apply edges_insert rest
++      simp only [Std.HashMap.size_insert, Std.HashMap.mem_iff_isSome_getElem?, hnone,
++        Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
++      omega
++
++theorem Trie.size_insert : ∀ (segs : List PathSeg) (t : Trie) (i node : Nat),
++    (t.insert i node segs).size ≤ t.size + segs.length
++  | [], _, _, _ => by simp [Trie.insert]
++  | .lit s _ :: rest, t, i, node => by
++    simp only [Trie.insert, List.length_cons]
++    split
++    · rename_i child _
++      have := size_insert rest t i child; omega
++    · have := size_insert rest
++        { t with lits := t.lits.insert (node, s) t.size, size := t.size + 1 } i t.size
++      simp only at this; omega
++  | .capture _ _ :: rest, t, i, node => by
++    simp only [Trie.insert, List.length_cons]
++    split
++    · rename_i child _
++      have := size_insert rest t i child; omega
++    · have := size_insert rest
++        { t with captures := t.captures.insert node t.size, size := t.size + 1 } i t.size
++      simp only at this; omega
++
++/-- `insert` adds `i` to the list of one node and changes no other list. -/
++theorem Trie.routes_insert_eq : ∀ (segs : List PathSeg) (t : Trie) (i node : Nat),
++    ∃ last, ∀ n, (t.insert i node segs).routes.getD n [] =
++      if n = last then i :: t.routes.getD n [] else t.routes.getD n []
++  | [], t, i, node => ⟨node, fun n => by
++      simp only [Trie.insert, Std.HashMap.getD_alter, beq_iff_eq]
++      by_cases h : n = node
++      · subst h
++        simp [Std.HashMap.getD_eq_getD_getElem?]
++      · simp [h, Ne.symm h]⟩
++  | .lit s _ :: rest, t, i, node => by
++    simp only [Trie.insert]
++    split
++    · exact routes_insert_eq rest t i _
++    · exact routes_insert_eq rest _ i _
++  | .capture _ _ :: rest, t, i, node => by
++    simp only [Trie.insert]
++    split
++    · exact routes_insert_eq rest t i _
++    · exact routes_insert_eq rest _ i _
++
++/-- The route lists hold each index below `i` once, in one list, and nothing else. -/
++structure Trie.Indexed (t : Trie) (i : Nat) : Prop where
++  below : ∀ n j, j ∈ t.routes.getD n [] → j < i
++  present : ∀ j < i, ∃ n, j ∈ t.routes.getD n []
++  nodup : ∀ n, (t.routes.getD n []).Nodup
++  unique : ∀ n n' j, j ∈ t.routes.getD n [] → j ∈ t.routes.getD n' [] → n = n'
++
++theorem Trie.Indexed.insert {t : Trie} {i : Nat} (h : t.Indexed i) (node : Nat)
++    (segs : List PathSeg) : (t.insert i node segs).Indexed (i + 1) := by
++  obtain ⟨last, hl⟩ := Trie.routes_insert_eq segs t i node
++  refine ⟨fun n j hj => ?_, fun j hj => ?_, fun n => ?_, fun n n' j hj hj' => ?_⟩
++  · rw [hl] at hj
++    split at hj
++    · rcases List.mem_cons.1 hj with rfl | hj
++      · omega
++      · have := h.below n j hj; omega
++    · have := h.below n j hj; omega
++  · by_cases hji : j = i
++    · subst hji
++      exact ⟨last, by simp [hl]⟩
++    · obtain ⟨n, hn⟩ := h.present j (by omega)
++      exact ⟨n, by rw [hl]; split <;> simp [hn]⟩
++  · rw [hl]
++    split
++    · exact List.nodup_cons.2 ⟨fun hi => by have := h.below n i hi; omega, h.nodup n⟩
++    · exact h.nodup n
++  · rw [hl] at hj hj'
++    have fresh : ∀ m, i ∉ t.routes.getD m [] := fun m hi => by have := h.below m i hi; omega
++    split at hj <;> split at hj'
++    · subst_vars; rfl
++    · rcases List.mem_cons.1 hj with rfl | hj
++      · exact absurd hj' (fresh n')
++      · exact h.unique n n' j hj hj'
++    · rcases List.mem_cons.1 hj' with rfl | hj'
++      · exact absurd hj (fresh n)
++      · exact h.unique n n' j hj hj'
++    · exact h.unique n n' j hj hj'
++
++theorem Trie.Indexed.insertAll : ∀ (routes : List (Route result)) {t : Trie} {i : Nat},
++    t.Indexed i → (t.insertAll i routes).Indexed (i + routes.length)
++  | [], _, _, h => h
++  | r :: rs, _, i, h => by
++    have := Trie.Indexed.insertAll rs (h.insert 0 r.segs)
++    simpa [Trie.insertAll, Nat.add_assoc, Nat.add_comm 1] using this
++
++theorem Trie.edges_insertAll : ∀ (routes : List (Route result)) (t : Trie) (i : Nat),
++    t.lits.size + t.captures.size + 1 = t.size →
++    (t.insertAll i routes).lits.size + (t.insertAll i routes).captures.size + 1 =
++      (t.insertAll i routes).size
++  | [], _, _, h => h
++  | r :: rs, t, i, h => edges_insertAll rs _ (i + 1) (edges_insert r.segs t i 0 h)
++
++theorem Trie.size_insertAll : ∀ (routes : List (Route result)) (t : Trie) (i : Nat),
++    (t.insertAll i routes).size ≤ t.size + (routes.map (·.segs.length)).sum
++  | [], _, _ => by simp [Trie.insertAll]
++  | r :: rs, t, i => by
++    have h₁ := size_insertAll rs (t.insert i 0 r.segs) (i + 1)
++    have h₂ := size_insert r.segs t i 0
++    simp only [Trie.insertAll, List.map_cons, List.sum_cons]
++    omega
++
++/-- The trie's memory grows with the patterns' segments. Its `size`, the number of nodes, is at most
++one per segment plus the root. Each node but the root has one edge into it, and each route's index
++sits in one node's list, once. -/
++theorem RouteIndex.memory_of (routes : List (Route result)) :
++    (RouteIndex.of routes).trie.size ≤ 1 + (routes.map (·.segs.length)).sum ∧
++      (RouteIndex.of routes).trie.lits.size + (RouteIndex.of routes).trie.captures.size + 1 =
++        (RouteIndex.of routes).trie.size ∧
++      (RouteIndex.of routes).trie.Indexed routes.length := by
++  refine ⟨?_, Trie.edges_insertAll routes {} 0 (by simp), ?_⟩
++  · simpa [RouteIndex.of] using Trie.size_insertAll routes {} 0
++  · simpa [RouteIndex.of] using
++      Trie.Indexed.insertAll routes (t := {}) (i := 0) ⟨by simp, by simp, by simp, by simp⟩
 +
 +end Routing.Internal
 -- 

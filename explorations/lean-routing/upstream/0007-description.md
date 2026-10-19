@@ -1,6 +1,6 @@
 Closes #8.
 
-`toHandler` and `Router.toHandler` now find a request's route with a segment trie built once over the table. Matching no longer slows as the table grows, and two theorems tie the trie to `matchTable`.
+`toHandler` and `Router.toHandler` now find a request's route with a segment trie built once over the table. A lookup tries only the routes shaped like the request, so its time doesn't grow with the rest of the table. Theorems tie the trie to `matchTable` and bound its memory.
 
 ### How it works
 
@@ -12,7 +12,8 @@ Closes #8.
 ### Guarantees
 
 - `RouteIndex.first_of` and `RouteIndex.wantsSlash_of` prove that the trie gives the answers `matchTable` gives, for every table, method and path. They use only Lean's standard axioms.
-- The proof in `test/RoutingTests/Trie.lean` is 308 lines, for 92 lines in `Routing/Trie.lean`.
+- `RouteIndex.memory_of` bounds the trie by one node per pattern segment, plus the root. Each node but the root has one edge into it, and each route's index appears once.
+- The proofs in `test/RoutingTests/Trie.lean` are 447 lines, for 92 lines in `Routing/Trie.lean`.
 - The `Server` and `Router` tests, which send real requests, pass unchanged.
 
 ### Performance
