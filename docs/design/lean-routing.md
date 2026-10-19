@@ -14,7 +14,7 @@ Espal builds its routes on [lean-routing](https://github.com/paulbutcher/lean-ro
 - It built with no warnings on Lean 4.35.0 and 4.36.0-rc1, and its tests passed on both. Lean 4.36.0-rc1 needed only a new `lean-toolchain`.
 - It uses Lean's module system. An executable that uses its macros links nothing from the Lean package.
 - Espal's lint found one problem, the `TypeName` instance that Std.Http's request extensions need.
-- Dispatch to the last of 200 routes took 3.1 µs, under 1 percent of the CPU Std.Http spends on a request.
+- Dispatch to the last of 200 routes took 3.1 µs, under 1 percent of the CPU Std.Http spends on a request. In a Std.Http server on one CPU, a `Router` with 200 routes and two middlewares stayed within the noise between rounds. That held for both throughput and CPU per request.
 - It exposes its definitions, so Espal can prove theorems about them in its own package.
 - Building the same parts ourselves would go against the [contributing guide](../../CONTRIBUTING.md), which prefers an existing library under a compatible license.
 
