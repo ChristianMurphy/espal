@@ -33,7 +33,7 @@ The first seems the closest fit to how Std.Async works today, but I'd like to he
 
 ### Community Feedback
 
-I asked first in [Waiting on a C library's socket in Std.Async](https://leanprover.zulipchat.com/#narrow/channel/270676-lean4/topic/Waiting.20on.20a.20C.20library.27s.20socket.20in.20Std.2EAsync), and no one has replied yet.
+I asked first in [Waiting on a C library's socket in Std.Async](https://leanprover.zulipchat.com/#narrow/channel/270676-lean4/topic/Waiting.20on.20a.20C.20library.27s.20socket.20in.20Std.2EAsync). No one has pointed to an existing way to do this or suggested an alternative so far.
 
 ### Impact
 
