@@ -423,7 +423,7 @@ Here we pick the HTTP layer, the Postgres client and the libraries we keep. We a
 - **Dependency spikes.** We build each candidate on Espal's toolchain, measure it against what Espal needs, and write down whether we keep or replace it. The candidates pin Lean versions from 4.33 to 4.35 today.
   - lean-linq (MIT) as the query layer (done). Espal builds on its core with its own Postgres client, and sends changes upstream first. It passed its tests on Lean 4.35.0 and 4.36.0-rc1, and its budgets close most gaps in the [statement budget](#statement-budget). A module can't import it yet, its warnings fail `--wfail`, and its build needs all four client libraries. Moving its MySQL driver to MariaDB Connector/C took four changed lines. The [decision note](docs/design/lean-linq.md) lists what has to change upstream.
   - lean-routing (Apache 2.0) as the router (done). Espal builds its routes on it as it is. On Lean 4.35.0 and 4.36.0-rc1 it built with no warnings and passed its tests. Espal adds the link round-trip proof, a reachability check, and a redirect to each resource's one URL. The [decision note](docs/design/lean-routing.md) has the details.
-  - LeanIO (MIT) for typed extractors, streamed multipart uploads, ranges and ETags. It has almost no proofs and uses `partial def`, so it would sit outside the totality lint, and the route report would say so.
+  - LeanIO (MIT) for streamed multipart uploads, ranges and ETags (done). Espal writes its own after 0.1 ships, when uploads and HTTP caching arrive. LeanIO's multipart parser loses the start of a field that spans two chunks, and its executables are 120 MB. The [decision note](docs/design/leanio.md) has the details.
   - cedar-lean (Apache 2.0) as the permission engine, with the proofs described under [every endpoint checks permission](#every-endpoint-checks-permission).
 - **Exit.** Numbers in `bench/results/` with the hardware recorded, a written decision for HTTP, Postgres and each dependency, and fixed targets in the table below.
 - **Failure.** The spike may show that no Lean server on this runtime gets near the throughput target. We then write our own server, which adds to the work in [packages, endpoints and the JSON API](#packages-endpoints-and-the-json-api), or restate the target. Several processes per machine stay part of the design either way, and statelessness makes them cheap.
@@ -600,6 +600,7 @@ These came out of the planning discussion in October 2026.
 - **Candidate dependencies.** lean-linq, lean-routing, LeanIO and cedar-lean, each evaluated during the spikes.
 - **Query core.** lean-linq's core, run by Espal's own Postgres client. Changes go upstream first, and a copy with its MIT notice is the fallback.
 - **Router.** lean-routing as it is, with Espal's endpoints, reachability check and canonical-path redirect on top. A copy with its Apache 2.0 notice is the fallback.
+- **Uploads, ranges and ETags.** Espal's own, with a chunk-split proof for the multipart parser. LeanIO stays out.
 - **Tenant app.** A QTI-shaped grading app, without XML import at first.
 - **Load target.** 100,000 submissions within one minute at the end of an exam.
 - **Databases in 0.1.** Postgres only.
