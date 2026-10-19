@@ -1,11 +1,11 @@
 # Changes to offer lean-routing
 
-Each patch applies on commit `75d8bc3`, except `0002`, which applies on top of `0001`. `0007` touches the same README list as `0001`, so the second to merge needs a small rebase. On Lean 4.35.0, `lake test` passed with no warnings on each branch.
+Each patch applies on commit `75d8bc3`, except `0002`, which applies on top of `0007`. `0007` touches the same README list as `0001`, so the second to merge needs a small rebase. On Lean 4.35.0, `lake test` passed with no warnings on each branch.
 
 | Patch | Change | Size | What changes for users |
 |---|---|---|---|
 | `0001` | Prove that a request for a link reaches its handler, given two fuzzed assumptions about Std.Http, described in `0001-description.md`, opened as [#10](https://github.com/paulbutcher/lean-routing/pull/10) | 141 lines added, mostly one new test file | Nothing |
-| `0002` | A `Nat` capture matches only the digits a link renders | 25 lines on top of `0001` | `/users/042` gets a 404 |
+| `0002` | A `Nat` capture matches only the digits a link renders, described in `0002-description.md` | 28 lines on top of `0007` | `/users/042` gets a 404 |
 | `0003` | Reject two `route_table` rows with the same pattern | 20 lines | A table with two such rows fails to compile |
 | `0004` | Spacing and line-break hints for `route_table` | 6 lines | Printed tables keep one row per line |
 | `0005` | An issue asking about matching routes with a trie, opened as [#8](https://github.com/paulbutcher/lean-routing/issues/8) | An issue, with a prototype | Nothing until a pull request lands |
@@ -15,7 +15,7 @@ Each patch applies on commit `75d8bc3`, except `0002`, which applies on top of `
 ## How realistic each one is
 
 - **`0001`.** lean-routing's `CLAUDE.md` prefers a proven theorem over a property, and asks contributors to check whether a property has become provable. Its README names `String.toNat?` as an obstacle. Lean's standard library now proves `Nat.toNat?_repr` ([lean4#12828](https://github.com/leanprover/lean4/pull/12828)), which Lean 4.35.0 includes. The server splits a path with Std.Http, so the proof doesn't need `String.splitOn`. Std.Http's parser, decoder and encoder have no lemmas, so the theorem assumes two properties of them, and the tests fuzz both.
-- **`0002`.** It applies a rule from earlier releases to `Nat` captures. Releases 0.8.0 and 0.9.0 refuse segments that no link can produce. It changes behaviour for every consumer, which lean-routing's `CLAUDE.md` asks a proposal to say. In `dispatch-bench`, dispatch time stayed within run-to-run noise.
+- **`0002`.** It applies a rule from earlier releases to `Nat` captures. Releases 0.8.0 and 0.9.0 refuse segments that no link can produce. It changes behaviour for every consumer, which lean-routing's `CLAUDE.md` asks a proposal to say. In `dispatch-bench`, dispatch time stayed within run-to-run noise, and so did the trie benchmark from `0007`. If `0001` merges first, the two `parseNat?` theorems move to `RoundTrip.lean`, whose `dispatch_pathOf` needs them. A scratch merge of all three passed `lake test`.
 - **`0003`.** It mirrors the existing check for a repeated name. It catches identical patterns only. A partial overlap, such as a `String` capture listed before a literal, stays legal, since the order of routes decides it.
 - **`0004`.** It only changes how tables print. lean-fmt then prints one row per line with spaces around `:=`. It puts the opening bracket on the table's first line, where the README's examples put it on the next.
 - **`0005`.** Dispatch costs about 15 ns per route, so it grows with the number of routes. A trie keeps the same results with no change to the API, and it stays near 0.5 µs whether or not routes share a prefix. It's a question rather than a patch, since the maintainer may prefer another structure.
