@@ -2,10 +2,11 @@ import Routing
 import Std.Data.HashMap
 
 /-!
-Two indexes that pick the same route as lean-routing's first-match scan, timed against
-`dispatchTable`: a segment trie, and a map from a route's first literal to the routes that start
-with it. Each only chooses which routes to try; `Route.tryDispatch` then runs them, so the result
-is the one the scan gives.
+Two indexes timed against `dispatchTable`: a segment trie, and a map from a route's first literal to
+the routes that start with it. Each chooses which routes to try, and `Route.tryDispatch` runs them.
+The index gives the scan's result. The trie tries only the lowest-numbered route whose pattern
+matches. So it misses a later route with the right method, which the `GET`-only check below hides.
+`trie/TrieBench.lean` times the fixed trie.
 -/
 
 open Routing

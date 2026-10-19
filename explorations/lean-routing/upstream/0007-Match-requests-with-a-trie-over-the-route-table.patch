@@ -1,0 +1,517 @@
+From 757b7eb5a5314e45f8851f993acabc1d18146906 Mon Sep 17 00:00:00 2001
+From: Christian Murphy <christian.murphy.42@gmail.com>
+Date: Mon, 19 Oct 2026 12:44:05 +0000
+Subject: [PATCH] Match requests with a trie over the route table
+
+Dispatch tried each route in turn, so its cost grew with the table. toHandler and Router.toHandler now build a segment trie once, with RouteIndex.of. A lookup collects the routes whose pattern could match the path. It then runs Route.tryMatch on them in table order.
+
+RouteIndex.matchTable_of proves that the trie picks the route matchTable picks, for every table, method and path. respond?, wantsSlash and slashRedirect? now take a RouteIndex in place of a list of routes.
+
+Signed-off-by: Christian Murphy <christian.murphy.42@gmail.com>
+---
+ CHANGELOG.md                |   5 +
+ README.md                   |   1 +
+ Routing.lean                |   5 +-
+ Routing/Router.lean         |   6 +-
+ Routing/Server.lean         |  16 ++-
+ Routing/Trie.lean           |  77 +++++++++++
+ test/RoutingTests.lean      |   1 +
+ test/RoutingTests/Trie.lean | 253 ++++++++++++++++++++++++++++++++++++
+ 8 files changed, 353 insertions(+), 11 deletions(-)
+ create mode 100644 Routing/Trie.lean
+ create mode 100644 test/RoutingTests/Trie.lean
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index dfeec3d..4a4a794 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,10 @@
+ # Changelog
+ 
++## [Unreleased]
++
++- Find a request's route with a trie built once over the table, so matching no longer slows as a table grows.
++- `respond?`, `wantsSlash` and `slashRedirect?` take a `RouteIndex`, built with `RouteIndex.of`, in place of a list of routes.
++
+ ## [0.10.1] - 2026-10-18
+ 
+ - Chore: bump dependencies.
+diff --git a/README.md b/README.md
+index 3f8905d..06ca87c 100644
+--- a/README.md
++++ b/README.md
+@@ -171,6 +171,7 @@ Linking to a strict descendant of the current page needs its own segment repeate
+ - Pattern round trip ([test/RoutingTests/Pattern.lean](test/RoutingTests/Pattern.lean), `parsePattern_renderPattern`): rendering a list of well-formed segments to a pattern string and parsing it back recovers exactly those segments.
+ - Template stability ([test/RoutingTests/Pattern.lean](test/RoutingTests/Pattern.lean), `renderTemplate_kind_invariant`): changing a capture's kind leaves the endpoint template that `matchedPattern?` reports unchanged, so telemetry grouped by route survives `:id:Nat` becoming `:id:String`.
+ - Router mounts ([test/RoutingTests/Router.lean](test/RoutingTests/Router.lean), `Route.under_segs`): a route under a `Router` mount has exactly the pattern a `route_table` mount gives it, so it matches what the table's links point at.
++- Route trie ([test/RoutingTests/Trie.lean](test/RoutingTests/Trie.lean), `RouteIndex.matchTable_of`): the trie that `toHandler` and `Router` build once over a table picks the route `matchTable` picks, for every table, method and path.
+ - Mount-prefix cancellation ([test/RoutingTests/RelativeLink.lean](test/RoutingTests/RelativeLink.lean), `relativeSegments_prefix`): a prefix shared by both endpoints drops out of a relative link, so a module's self-links are the same wherever it is mounted.
+ - By construction: a handler's type is computed from its pattern, so a wrong-arity or wrong-type handler fails to compile, and `PathSeg.lit` and `MountPoint` take a proof that no segment is `.` or `..`. The `#guard_msgs` tests in [test/RoutingTests/](test/RoutingTests/) pin these, along with the compile-time rejection of malformed patterns, duplicate route names and captured mount prefixes.
+ 
+diff --git a/Routing.lean b/Routing.lean
+index dbc9012..bceb2a7 100644
+--- a/Routing.lean
++++ b/Routing.lean
+@@ -7,6 +7,7 @@ module
+ public import Routing.Pattern
+ public import Routing.Handler
+ public import Routing.Route
++public import Routing.Trie
+ public import Routing.Server
+ public import Routing.Router
+ public import Routing.RouteTable
+@@ -25,7 +26,9 @@ plain runtime data with no type-level encoding. From that *value*, `HandlerType
+ 
+ `Route`/`dispatchTable` (`Routing/Route.lean`) bundle a method, pattern, and handler into a table
+ tried in order. `matchTable` adds the identity of the route that matched, which `toHandler`
+-(`Routing/Server.lean`) publishes for a wrapping middleware to read back.
++(`Routing/Server.lean`) publishes for a wrapping middleware to read back. `toHandler` finds that
++route with a trie built once over the table (`Routing/Trie.lean`). The trie picks the route
++`matchTable` would, without trying every one.
+ 
+ A `route_table` row can `mount` another table under a literal path prefix
+ (`Routing/RouteTable.lean`); `mount_routes` (`Routing/RouteMount.lean`) does the same for a list of
+diff --git a/Routing/Router.lean b/Routing/Router.lean
+index b9200e9..c30e3c1 100644
+--- a/Routing/Router.lean
++++ b/Routing/Router.lean
+@@ -87,21 +87,21 @@ mutual
+ /-- Everything not depending on the request is computed here, once, middleware included. -/
+ private def Router.compile : Router → Compiled
+   | { middlewares, routes, routers, fallback } =>
+-    let flat := Entry.listToRoutes routes
++    let index := RouteIndex.of (Entry.listToRoutes routes)
+     let roots := routes.filterMap fun
+       | .mount root _ => some root.segs
+       | .route _ => none
+     let subs := Router.compileAll routers
+     let fallback := fallback.getD (Handler.ofFn defaultNotFound)
+     let own (method : Method) (path : List String) : Bool :=
+-      (matchTable flat method path).isSome || wantsSlash flat method path
++      (index.matchTable method path).isSome || wantsSlash index method path
+     let next (method : Method) (path : List String) : StatelessHandler :=
+       match subs.find? (·.takes method path) with
+       | some sub => sub.handler
+       | none => fallback
+     let inner : StatelessHandler :=
+       { onRequest := fun request =>
+-          match respond? flat request with
++          match respond? index request with
+           | some response => response
+           | none => (next request.line.method (decodedPath request.line.uri)).onRequest request
+         -- A sub-router's middleware may refuse a body it would not accept, so ask the router
+diff --git a/Routing/Server.lean b/Routing/Server.lean
+index 602c7ba..d8e4dc5 100644
+--- a/Routing/Server.lean
++++ b/Routing/Server.lean
+@@ -5,7 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
+ module
+ 
+ public import Std.Http.Server
+-public import Routing.Route
++public import Routing.Trie
+ 
+ public section
+ 
+@@ -40,13 +40,13 @@ def matchedPattern? (extensions : Extensions) : Option String :=
+ 
+ /-- Whether a request for `path` would match one of `routes` with a trailing slash added, as a
+ mounted index does (`mountSegs`, `Pattern.lean`). -/
+-def wantsSlash (routes : List (Route Result)) (method : Method) (path : List String) : Bool :=
+-  path.getLast? != some "" && (matchTable routes method (path ++ [""])).isSome
++def wantsSlash (routes : RouteIndex Result) (method : Method) (path : List String) : Bool :=
++  path.getLast? != some "" && (routes.matchTable method (path ++ [""])).isSome
+ 
+ /-- Where to redirect a request that matched no route but `wantsSlash`: its target with the slash
+ added, query intact. Serving the slashless form instead would break relative links from that
+ page. -/
+-def slashRedirect? (routes : List (Route Result)) (method : Method) (target : RequestTarget)
++def slashRedirect? (routes : RouteIndex Result) (method : Method) (target : RequestTarget)
+     (path : List String) : Option Header.Value :=
+   if wantsSlash routes method path then
+     let query := target.query
+@@ -56,7 +56,8 @@ def slashRedirect? (routes : List (Route Result)) (method : Method) (target : Re
+     none
+ 
+ /-- Decodes the request's method and path (`RequestTarget.path.toDecodedSegments` feeds `dispatch`
+-via `matchTable`), tries each route in order, and applies the matched handler to the full request.
++via `RouteIndex.matchTable`), finds the first route that matches, and applies its handler to the
++full request.
+ A request that matches nothing but would with a trailing slash gets a `308` there instead
+ (`slashRedirect?`). `none` if neither.
+ 
+@@ -65,10 +66,10 @@ in *both* directions, because they reach different readers. The request copy is
+ matched handler and to anything the router calls into. The response copy is the one visible to
+ middleware *wrapping* the router: such middleware has already passed its request downwards by the
+ time matching happens, so the response is the only channel that travels back up to it. -/
+-def respond? (routes : List (Route Result)) (request : Request Body.Stream) :
++def respond? (routes : RouteIndex Result) (request : Request Body.Stream) :
+     Option (ContextAsync (Response Body.Any)) :=
+   let path := request.line.uri.path.toDecodedSegments.toList
+-  match matchTable routes request.line.method path with
++  match routes.matchTable request.line.method path with
+   | some (matched, handler) => some do
+       let response ← handler { request with extensions := request.extensions.insert matched }
+       return { response with extensions := response.extensions.insert matched }
+@@ -80,6 +81,7 @@ def respond? (routes : List (Route Result)) (request : Request Body.Stream) :
+ `notFound`. -/
+ def toHandler (routes : List (Route Result)) (notFound : Result := defaultNotFound) :
+     StatelessHandler :=
++  let routes := RouteIndex.of routes
+   Handler.ofFn fun request => (respond? routes request).getD (notFound request)
+ 
+ end Routing
+diff --git a/Routing/Trie.lean b/Routing/Trie.lean
+new file mode 100644
+index 0000000..bc976f1
+--- /dev/null
++++ b/Routing/Trie.lean
+@@ -0,0 +1,77 @@
++/-
++Copyright (c) 2026 Paul Butcher. All rights reserved.
++Released under Apache 2.0 license as described in the file LICENSE.
++-/
++module
++
++public import Routing.Route
++public import Std.Data.HashMap
++
++public section
++
++@[expose] section
++
++namespace Routing
++
++open Std.Http (Method)
++
++/-- A segment trie over route patterns. Node `0` is the root. `lits` leads from a node along a
++literal segment to its child, and `captures` along a capture of either kind, since
++`RouteIndex.matchTable` runs `Route.tryMatch` on each route the trie picks. `routes` holds the
++indexes of the routes whose pattern ends at a node, in table order. -/
++structure Trie where
++  lits : Std.HashMap (Nat × String) Nat := {}
++  captures : Std.HashMap Nat Nat := {}
++  routes : Std.HashMap Nat (List Nat) := {}
++  size : Nat := 1
++
++/-- `t` with route `i`, whose pattern continues with `segs` below `node`. -/
++def Trie.insert (t : Trie) (i node : Nat) : List PathSeg → Trie
++  | [] => { t with routes := t.routes.alter node fun is => some (is.getD [] ++ [i]) }
++  | .lit s _ :: rest =>
++    match t.lits[(node, s)]? with
++    | some child => t.insert i child rest
++    | none =>
++      { t with lits := t.lits.insert (node, s) t.size, size := t.size + 1 }.insert i t.size rest
++  | .capture _ _ :: rest =>
++    match t.captures[node]? with
++    | some child => t.insert i child rest
++    | none =>
++      { t with captures := t.captures.insert node t.size, size := t.size + 1 }.insert i t.size rest
++
++/-- `t` with `routes`, numbered from `i`. -/
++def Trie.insertAll (t : Trie) (i : Nat) : List (Route result) → Trie
++  | [] => t
++  | r :: rs => (t.insert i 0 r.segs).insertAll (i + 1) rs
++
++/-- The routes below `node` whose pattern could match `path`. It includes every one that does,
++and may include others. -/
++def Trie.candidates (t : Trie) (node : Nat) : List String → List Nat
++  | [] => t.routes.getD node []
++  | p :: ps =>
++    -- `dispatch` accepts a trailing `""` once a pattern is matched.
++    let here := if p == "" && ps.isEmpty then t.routes.getD node [] else []
++    let viaLit := match t.lits[(node, p)]? with
++      | some child => t.candidates child ps
++      | none => []
++    let viaCapture := match t.captures[node]? with
++      | some child => t.candidates child ps
++      | none => []
++    here ++ viaLit ++ viaCapture
++
++/-- A route table with a trie over its patterns, so that matching a request tries only the routes
++that could match it. -/
++structure RouteIndex (result : Type) where
++  routes : Array (Route result)
++  trie : Trie
++
++def RouteIndex.of (routes : List (Route result)) : RouteIndex result :=
++  { routes := routes.toArray, trie := ({} : Trie).insertAll 0 routes }
++
++/-- `matchTable` over the routes the trie picks for `path`, in table order. -/
++def RouteIndex.matchTable (index : RouteIndex result) (method : Method) (path : List String) :
++    Option (MatchedRoute × result) :=
++  (index.trie.candidates 0 path).mergeSort.findSome? fun i =>
++    index.routes[i]?.bind (·.tryMatch method path)
++
++end Routing
+diff --git a/test/RoutingTests.lean b/test/RoutingTests.lean
+index 568760d..73d09d7 100644
+--- a/test/RoutingTests.lean
++++ b/test/RoutingTests.lean
+@@ -11,3 +11,4 @@ import RoutingTests.Mount
+ import RoutingTests.RelativeLink
+ import RoutingTests.CrossModule
+ import RoutingTests.Router
++import RoutingTests.Trie
+diff --git a/test/RoutingTests/Trie.lean b/test/RoutingTests/Trie.lean
+new file mode 100644
+index 0000000..a95d548
+--- /dev/null
++++ b/test/RoutingTests/Trie.lean
+@@ -0,0 +1,253 @@
++/-
++Copyright (c) 2026 Paul Butcher. All rights reserved.
++Released under Apache 2.0 license as described in the file LICENSE.
++-/
++import Routing.Trie
++
++namespace Routing
++
++open Std.Http (Method)
++
++/-- `segs` would match `path` if each capture accepted any segment. -/
++def Fits : List PathSeg → List String → Prop
++  | [], [] => True
++  | [], [""] => True
++  | .lit s _ :: rest, p :: ps => s = p ∧ Fits rest ps
++  | .capture _ _ :: rest, _ :: ps => Fits rest ps
++  | _, _ => False
++
++theorem fits_of_dispatch : ∀ (segs : List PathSeg) (h : HandlerType segs r) (path : List String),
++    (dispatch segs h path).isSome → Fits segs path
++  | [], _, [], _ => trivial
++  | [], _, [""], _ => trivial
++  | [], _, p :: q :: ps, hd => by simp [dispatch] at hd
++  | [], _, [p], hd => by
++    by_cases hp : p = ""
++    · subst hp; trivial
++    · simp [dispatch, hp] at hd
++  | .lit s _ :: rest, h, [], hd => by simp [dispatch] at hd
++  | .lit s _ :: rest, h, p :: ps, hd => by
++    by_cases hs : s = p
++    · subst hs
++      simp only [dispatch, BEq.rfl, ite_true] at hd
++      exact ⟨rfl, fits_of_dispatch rest h ps hd⟩
++    · simp [dispatch, hs] at hd
++  | .capture _ .nat :: rest, h, [], hd => by simp [dispatch] at hd
++  | .capture _ .nat :: rest, h, p :: ps, hd => by
++    simp only [dispatch] at hd
++    cases hn : p.toNat? with
++    | none => simp [hn] at hd
++    | some n =>
++      simp only [hn, Option.bind_some] at hd
++      exact fits_of_dispatch rest (h n) ps hd
++  | .capture _ .string :: rest, h, [], hd => by simp [dispatch] at hd
++  | .capture _ .string :: rest, h, p :: ps, hd => by
++    simp only [dispatch] at hd
++    split at hd
++    · simp at hd
++    · exact fits_of_dispatch rest (h p) ps hd
++
++/-- Following `segs` from `node` leads to a node where route `i` ends. -/
++def Reaches (t : Trie) (node i : Nat) : List PathSeg → Prop
++  | [] => i ∈ t.routes.getD node []
++  | .lit s _ :: rest => ∃ child, t.lits[(node, s)]? = some child ∧ Reaches t child i rest
++  | .capture _ _ :: rest => ∃ child, t.captures[node]? = some child ∧ Reaches t child i rest
++
++theorem mem_candidates : ∀ (segs : List PathSeg) (t : Trie) (node i : Nat) (path : List String),
++    Reaches t node i segs → Fits segs path → i ∈ t.candidates node path
++  | [], t, node, i, [], hr, _ => by simpa [Trie.candidates, Reaches] using hr
++  | [], t, node, i, [p], hr, hf => by
++    by_cases hp : p = ""
++    · subst hp
++      simp only [Reaches] at hr
++      simp [Trie.candidates, hr]
++    · simp [Fits, hp] at hf
++  | [], _, _, _, _ :: _ :: _, _, hf => by simp [Fits] at hf
++  | .lit _ _ :: _, _, _, _, [], _, hf => by simp [Fits] at hf
++  | .lit s _ :: rest, t, node, i, p :: ps, ⟨child, hc, hr⟩, ⟨hs, hf⟩ => by
++    subst hs
++    simp only [Trie.candidates, hc, List.mem_append]
++    exact Or.inl (Or.inr (mem_candidates rest t child i ps hr hf))
++  | .capture _ _ :: _, _, _, _, [], _, hf => by simp [Fits] at hf
++  | .capture _ _ :: rest, t, node, i, p :: ps, ⟨child, hc, hr⟩, hf => by
++    simp only [Trie.candidates, hc, List.mem_append]
++    exact Or.inr (mem_candidates rest t child i ps hr hf)
++
++theorem Trie.lits_insert : ∀ (segs : List PathSeg) (t : Trie) (i node : Nat) {k : Nat × String}
++    {v : Nat}, t.lits[k]? = some v → (t.insert i node segs).lits[k]? = some v
++  | [], _, _, _, _, _, h => h
++  | .lit s _ :: rest, t, i, node, k, v, h => by
++    simp only [Trie.insert]
++    split
++    · exact lits_insert rest t i _ h
++    · rename_i hnone
++      apply lits_insert rest
++      rw [Std.HashMap.getElem?_insert]
++      split
++      · rename_i heq
++        rw [eq_of_beq heq] at hnone
++        simp [hnone] at h
++      · exact h
++  | .capture _ _ :: rest, t, i, node, k, v, h => by
++    simp only [Trie.insert]
++    split
++    · exact lits_insert rest t i _ h
++    · exact lits_insert rest _ i _ h
++
++theorem Trie.captures_insert : ∀ (segs : List PathSeg) (t : Trie) (i node : Nat) {k v : Nat},
++    t.captures[k]? = some v → (t.insert i node segs).captures[k]? = some v
++  | [], _, _, _, _, _, h => h
++  | .lit s _ :: rest, t, i, node, k, v, h => by
++    simp only [Trie.insert]
++    split
++    · exact captures_insert rest t i _ h
++    · exact captures_insert rest _ i _ h
++  | .capture _ _ :: rest, t, i, node, k, v, h => by
++    simp only [Trie.insert]
++    split
++    · exact captures_insert rest t i _ h
++    · rename_i hnone
++      apply captures_insert rest
++      rw [Std.HashMap.getElem?_insert]
++      split
++      · rename_i heq
++        rw [eq_of_beq heq] at hnone
++        simp [hnone] at h
++      · exact h
++
++theorem Trie.routes_insert : ∀ (segs : List PathSeg) (t : Trie) (i node : Nat) {n j : Nat},
++    j ∈ t.routes.getD n [] → j ∈ (t.insert i node segs).routes.getD n []
++  | [], t, i, node, n, j, h => by
++    simp only [Trie.insert, Std.HashMap.getD_alter]
++    split
++    · rename_i heq
++      rw [eq_of_beq heq, ← Std.HashMap.getD_eq_getD_getElem?] at *
++      simp [h]
++    · exact h
++  | .lit s _ :: rest, t, i, node, n, j, h => by
++    simp only [Trie.insert]
++    split
++    · exact routes_insert rest t i _ h
++    · exact routes_insert rest _ i _ h
++  | .capture _ _ :: rest, t, i, node, n, j, h => by
++    simp only [Trie.insert]
++    split
++    · exact routes_insert rest t i _ h
++    · exact routes_insert rest _ i _ h
++
++theorem Reaches.insert : ∀ (segs' : List PathSeg) {t : Trie} {node' j : Nat},
++    Reaches t node' j segs' →
++    ∀ (segs : List PathSeg) (i node : Nat), Reaches (t.insert i node segs) node' j segs'
++  | [], _, _, _, h, segs, i, node => Trie.routes_insert segs _ i node h
++  | .lit _ _ :: rest, _, _, _, ⟨child, hc, hr⟩, segs, i, node =>
++    ⟨child, Trie.lits_insert segs _ i node hc, Reaches.insert rest hr segs i node⟩
++  | .capture _ _ :: rest, _, _, _, ⟨child, hc, hr⟩, segs, i, node =>
++    ⟨child, Trie.captures_insert segs _ i node hc, Reaches.insert rest hr segs i node⟩
++
++theorem reaches_insert : ∀ (segs : List PathSeg) (t : Trie) (i node : Nat),
++    Reaches (t.insert i node segs) node i segs
++  | [], t, i, node => by simp [Trie.insert, Reaches]
++  | .lit s _ :: rest, t, i, node => by
++    simp only [Trie.insert]
++    split
++    · rename_i child hc
++      exact ⟨child, Trie.lits_insert rest t i child hc, reaches_insert rest t i child⟩
++    · exact ⟨t.size, Trie.lits_insert rest _ i _ (by simp), reaches_insert rest _ i _⟩
++  | .capture _ _ :: rest, t, i, node => by
++    simp only [Trie.insert]
++    split
++    · rename_i child hc
++      exact ⟨child, Trie.captures_insert rest t i child hc, reaches_insert rest t i child⟩
++    · exact ⟨t.size, Trie.captures_insert rest _ i _ (by simp), reaches_insert rest _ i _⟩
++
++theorem Reaches.insertAll : ∀ (routes : List (Route result)) {t : Trie} {node j : Nat}
++    {segs : List PathSeg} (i : Nat), Reaches t node j segs →
++      Reaches (t.insertAll i routes) node j segs
++  | [], _, _, _, _, _, h => h
++  | r :: rs, _, _, _, _, i, h => Reaches.insertAll rs (i + 1) (Reaches.insert _ h r.segs i 0)
++
++theorem reaches_insertAll : ∀ (routes : List (Route result)) (t : Trie) (i k : Nat)
++    (hk : k < routes.length), Reaches (t.insertAll i routes) 0 (i + k) routes[k].segs
++  | r :: rs, t, i, 0, _ => Reaches.insertAll rs (i + 1) (reaches_insert r.segs t i 0)
++  | r :: rs, t, i, k + 1, hk => by
++    have := reaches_insertAll rs (t.insert i 0 r.segs) (i + 1) k (by simpa using hk)
++    simpa [Trie.insertAll, Nat.add_assoc, Nat.add_comm 1 k] using this
++
++/-- On a sorted list that holds `m`, the least `k` where `f k` is `some`, `findSome?` finds it. -/
++theorem findSome?_sorted {f : Nat → Option β} {b : β} {m : Nat} (hb : f m = some b)
++    (hmin : ∀ j < m, f j = none) :
++    ∀ {cs : List Nat}, cs.Pairwise (· ≤ ·) → m ∈ cs → cs.findSome? f = some b
++  | c :: cs, hs, hm => by
++    rw [List.pairwise_cons] at hs
++    by_cases hc : c = m
++    · subst hc
++      simp [hb]
++    · have hm' : m ∈ cs := by simpa [Ne.symm hc] using hm
++      have hcm : c < m := Nat.lt_of_le_of_ne (hs.1 m hm') hc
++      simp only [List.findSome?_cons, hmin c hcm]
++      exact findSome?_sorted hb hmin hs.2 hm'
++
++theorem findSome?_eq_range : ∀ (l : List α) (g : α → Option β),
++    l.findSome? g = (List.range l.length).findSome? fun k => l[k]?.bind g
++  | [], _ => rfl
++  | a :: l, g => by
++    rw [List.length_cons, List.range_succ_eq_map, List.findSome?_cons, List.findSome?_cons,
++      List.findSome?_map, findSome?_eq_range l g]
++    rfl
++
++/-- The least `m` where `f m` is `some`, from where `findSome?` stops on `List.range n`. -/
++theorem least_of_findSome?_range {f : Nat → Option β} {b : β} {n : Nat}
++    (h : (List.range n).findSome? f = some b) :
++    ∃ m, m < n ∧ f m = some b ∧ ∀ j < m, f j = none := by
++  obtain ⟨l₁, m, l₂, hl, hb, hpre⟩ := List.findSome?_eq_some_iff.1 h
++  have hsorted := List.pairwise_lt_range (n := n)
++  rw [hl, List.pairwise_append, List.pairwise_cons] at hsorted
++  refine ⟨m, List.mem_range.1 (hl ▸ by simp), hb, fun j hj => hpre j ?_⟩
++  have hjn : j ∈ List.range n := List.mem_range.2 (by
++    have := List.mem_range.1 (hl ▸ (by simp : m ∈ l₁ ++ m :: l₂))
++    omega)
++  rw [hl, List.mem_append, List.mem_cons] at hjn
++  rcases hjn with h₁ | rfl | h₂
++  · exact h₁
++  · omega
++  · have := hsorted.2.1.1 j h₂
++    omega
++
++/-- The trie picks the route `matchTable` picks. -/
++theorem RouteIndex.matchTable_of (routes : List (Route result)) (method : Method)
++    (path : List String) :
++    (RouteIndex.of routes).matchTable method path = Routing.matchTable routes method path := by
++  have hf :
++      (fun (k : Nat) => (RouteIndex.of routes).routes[k]?.bind (Route.tryMatch · method path)) =
++        fun (k : Nat) => routes[k]?.bind (Route.tryMatch · method path) := by
++    funext k
++    simp [RouteIndex.of]
++  simp only [RouteIndex.matchTable, hf]
++  rw [Routing.matchTable, findSome?_eq_range routes]
++  cases h : (List.range routes.length).findSome?
++      fun (k : Nat) => routes[k]?.bind (Route.tryMatch · method path) with
++  | none =>
++    rw [List.findSome?_eq_none_iff] at h ⊢
++    intro k _
++    by_cases hk : k < routes.length
++    · exact h k (List.mem_range.2 hk)
++    · simp [List.getElem?_eq_none (Nat.le_of_not_lt hk)]
++  | some b =>
++    obtain ⟨m, hm, hb, hmin⟩ := least_of_findSome?_range h
++    refine findSome?_sorted hb hmin
++      ((List.pairwise_mergeSort (le := fun a b => decide (a ≤ b))
++        (fun _ _ _ hab hbc => by simp only [decide_eq_true_eq] at *; omega)
++        (fun a b => by simp only [Bool.or_eq_true, decide_eq_true_eq]; omega) _).imp
++        (by simp)) ?_
++    rw [List.mem_mergeSort]
++    have hd : (dispatch routes[m].segs routes[m].handler path).isSome := by
++      simp only [List.getElem?_eq_getElem hm, Option.bind_some, Route.tryMatch,
++        Route.tryDispatch] at hb
++      split at hb
++      · cases hdis : dispatch routes[m].segs routes[m].handler path <;> simp_all
++      · simp at hb
++    have hr : Reaches (RouteIndex.of routes).trie 0 m routes[m].segs := by
++      simpa [RouteIndex.of] using reaches_insertAll routes {} 0 m hm
++    simpa using mem_candidates _ _ 0 m path hr (fits_of_dispatch _ _ _ hd)
++
++end Routing
+-- 
+2.43.0
+

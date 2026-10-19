@@ -1,0 +1,16 @@
+{"version": "1.3.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "https://github.com/ChristianMurphy/lean-routing",
+   "type": "git",
+   "subDir": null,
+   "scope": "",
+   "rev": "757b7eb5a5314e45f8851f993acabc1d18146906",
+   "name": "routing",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "757b7eb5a5314e45f8851f993acabc1d18146906",
+   "inherited": false,
+   "configFile": "lakefile.lean"}],
+ "name": "«trie-bench»",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}
