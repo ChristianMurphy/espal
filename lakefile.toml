@@ -16,6 +16,10 @@ name = "EspalTests"
 srcDir = "tests"
 globs = ["EspalTests.+"]
 
+[[lean_lib]]
+name = "LintRules"
+srcDir = "scripts"
+
 [[lean_exe]]
 name = "lint"
 root = "Lint"
