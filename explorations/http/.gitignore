@@ -1,3 +1,4 @@
 # A copy of this directory built with Lean 4.36.0-rc1, which bench.py reads from.
 build436/
 __pycache__/
+.venv/

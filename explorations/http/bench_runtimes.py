@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Compares Std.Http with Node.js and Ruby on the HTTP spike's machine and method.
+"""Compares Std.Http with Node.js, Ruby and Python on the HTTP spike's machine and method.
 
 Each runtime runs as one process on CPUs 0 and 1, and as two processes pinned to one CPU each
 behind haproxy on CPU 2. oha runs on CPU 3 in every setup. A closed-loop run finds the peak, then
 three open-loop runs at 70 percent of it give p99 latency.
 
-Usage: bench_runtimes.py OUT_DIR [--seconds N] [--repeats N]
+Usage: bench_runtimes.py OUT_DIR [--seconds N] [--repeats N] [RUNTIME ...]
+
+Naming runtimes runs only those and replaces their rows in an existing runtimes.json.
 """
 
 import argparse
@@ -20,6 +22,9 @@ RUNTIMES = {
     "std-http-small-4.36.0-rc1": [str(B436 / "spike-std-http-small")],
     "node-http": ["node", str(HERE / "node/server.js")],
     "ruby-puma": [str(HERE / "ruby/serve.sh"), "0"],
+    "rails-puma": [str(HERE / "rails/serve.sh")],
+    "flask-gunicorn": [str(HERE / "python/serve-flask.sh")],
+    "fastapi-uvicorn": [str(HERE / "python/serve-fastapi.sh")],
 }
 GO = [str(HERE / ".lake/spike-go")]
 
@@ -33,11 +38,13 @@ def run(url, seconds, repeats):
     return {"peak_rps": peak, "p99_ms_at_70": p99, "non200_at_70": non200}
 
 
-def setups():
+def setups(names):
     for name, cmd in RUNTIMES.items():
-        yield name, "one process, CPUs 0-1", cmd, None
-        yield name, "two processes behind haproxy", cmd, ["0", "1"]
-    yield "go-net-http", "one process, CPUs 0-1", GO, None
+        if name in names:
+            yield name, "one process, CPUs 0-1", cmd, None
+            yield name, "two processes behind haproxy", cmd, ["0", "1"]
+    if "go-net-http" in names:
+        yield "go-net-http", "one process, CPUs 0-1", GO, None
 
 
 def main():
@@ -45,12 +52,13 @@ def main():
     ap.add_argument("out")
     ap.add_argument("--seconds", type=int, default=10)
     ap.add_argument("--repeats", type=int, default=3)
+    ap.add_argument("runtimes", nargs="*", default=[*RUNTIMES, "go-net-http"])
     a = ap.parse_args()
     os.environ.setdefault("RUBY_BINDIR", "/opt/rbenv/versions/3.4.11/bin")
     out = pathlib.Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     rows = []
-    for name, setup, cmd, backends in setups():
+    for name, setup, cmd, backends in setups(a.runtimes):
         for path in ["/plaintext", "/json"]:
             procs, proxy = [], None
             try:
@@ -77,7 +85,9 @@ def main():
                     stop(proxy)
             rows.append(row)
             print(f"{name:28} {setup:30} {path:10} peak {row['peak_rps']:8.0f}  p99@70 {row['p99_ms_at_70'][1]:7.2f} ms  non200 {row['non200_at_70']}", flush=True)
-    (out / "runtimes.json").write_text(json.dumps(rows, indent=1))
+    results = out / "runtimes.json"
+    kept = [r for r in json.loads(results.read_text()) if r["runtime"] not in a.runtimes] if results.exists() else []
+    results.write_text(json.dumps(kept + rows, indent=1))
 
 
 if __name__ == "__main__":
