@@ -7,4 +7,4 @@ Two options come to mind:
 
 I prototyped the second option on Linux. A program in another package linked libpq with no settings of its own, and Lake loaded lean-linq with FreeTDS uninstalled.
 
-Would either option be a good fit for lean-linq? I'd keep the macOS lookups as they are, and I'm glad to open a pull request in whichever shape suits you.
+Would either option be a good fit for lean-linq? I'm glad to open a pull request in whichever shape suits you.
