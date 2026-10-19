@@ -16,6 +16,7 @@ Keep agent instructions in `.claude/`. Don't put them in `CONTRIBUTING.md` or ot
 - Use concrete verbs, and name the concrete fact, such as the error, the file or what breaks. Words such as "there" or "carry over" that stand in for a fact leave the reader guessing.
 - Avoid stock phrases and inflated claims. State design goals as goals.
 - Keep sentences under about 25 words. Write plain sentences rather than a colon before the point.
+- State the claim directly. Skip contrasts that set it against something weaker, such as "X, not only Y" or "X rather than just Y".
 - Check each claim before you write it, and say which checks ran and passed.
 - Refer to milestones and properties by name, with a link, rather than by a code such as M1.
 
