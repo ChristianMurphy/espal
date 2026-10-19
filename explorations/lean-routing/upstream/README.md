@@ -5,7 +5,7 @@ Each patch applies on commit `75d8bc3`, except `0002`, which applies on top of `
 | Patch | Change | Size | What changes for users |
 |---|---|---|---|
 | `0001` | Prove that a request for a link reaches its handler, given two fuzzed assumptions about Std.Http, described in `0001-description.md`, opened as [#10](https://github.com/paulbutcher/lean-routing/pull/10) | 141 lines added, mostly one new test file | Nothing |
-| `0002` | A `Nat` capture matches only the digits a link renders, described in `0002-description.md` | 28 lines on top of `0007` | `/users/042` gets a 404 |
+| `0002` | A `Nat` capture matches only the digits a link renders, described in `0002-description.md`, opened as [#12](https://github.com/paulbutcher/lean-routing/pull/12) | 28 lines on top of `0007` | `/users/042` gets a 404 |
 | `0003` | Reject two `route_table` rows with the same pattern | 20 lines | A table with two such rows fails to compile |
 | `0004` | Spacing and line-break hints for `route_table` | 6 lines | Printed tables keep one row per line |
 | `0005` | An issue asking about matching routes with a trie, opened as [#8](https://github.com/paulbutcher/lean-routing/issues/8) | An issue, with a prototype | Nothing until a pull request lands |
