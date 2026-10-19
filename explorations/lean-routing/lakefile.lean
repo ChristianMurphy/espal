@@ -10,3 +10,5 @@ require routing from git
 @[default_target] lean_lib Trial
 
 @[default_target] lean_exe «dispatch-bench» where root := `DispatchBench
+
+@[default_target] lean_exe «trie-bench» where root := `TrieBench

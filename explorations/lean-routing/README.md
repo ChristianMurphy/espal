@@ -6,6 +6,7 @@ This trial checks [lean-routing](https://github.com/paulbutcher/lean-routing) as
 
 - `Trial/Behaviour.lean` checks each claim below that mentions a path, with `#guard`.
 - `DispatchBench.lean` times dispatch with many routes.
+- `TrieBench.lean` times a segment trie against lean-routing's scan.
 - `serve/` runs Std.Http on Lean 4.36.0-rc1 with and without lean-routing, and `serve/bench_router.py` compares them.
 - `upstream/` holds the changes to offer lean-routing, as patches, with how realistic each one is.
 
@@ -69,6 +70,48 @@ Dispatch tries each route in order. Pinned to one CPU, `dispatch-bench` reached 
 - The medians spread by 4 percent in peak and 9 percent in CPU, in no consistent order. The 200-route `Router` used as much CPU as the bare handler, so the spread is noise. The 3.1 µs that `dispatch-bench` measured for 200 routes is under 1 percent of a request.
 - A request that matches nothing scans the routes twice, the second time to see whether a trailing slash would match. A `Router` also asks each sub-router. With 200 routes that still comes to a few microseconds.
 - Std.Http's own work takes almost all of a request's CPU time.
+
+## Routing algorithm
+
+lean-routing tries each route in order and returns the first that matches, so its cost grows with the number of routes. A request that matches nothing pays for every route, and twice, since the trailing-slash check scans again.
+
+### Other ecosystems
+
+| Router | How it matches | When patterns overlap |
+|---|---|---|
+| [Express](https://adventures.nodeland.dev/archive/you-should-not-use-urlpattern-to-route-http/) | Tries each route's regular expression in order | The first match wins |
+| [Django](https://docs.djangoproject.com/en/stable/topics/http/urls/) | Tries each pattern in order | The first match wins |
+| [Rails](https://rubydoc.info/docs/rails/ActionDispatch/Journey/Router) | Runs the path's tokens through a transition table built from all routes | Candidates sort by definition order |
+| [Phoenix](https://phoenix.hexdocs.pm/Phoenix.Router.html) | Compiles all routes into one `case` expression, which the Erlang VM optimizes | The first route defined wins |
+| [Fastify](https://adventures.nodeland.dev/archive/you-should-not-use-urlpattern-to-route-http/) (find-my-way) | Radix tree | Static segments come before parameters and wildcards |
+| [Hono](https://hono.dev/concepts/routers) | One combined regular expression, or a trie for patterns that can't combine | Not checked |
+| [FastRoute](https://www.npopov.com/2014/02/18/Fast-request-routing-using-regular-expressions.html) (PHP) | Combines routes into regular expressions of about ten routes each | Not checked |
+| [Werkzeug](https://werkzeug.palletsprojects.com/en/stable/changes/) (Flask) | A state machine, since 2.2 | Not checked |
+| [ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/routing) | A DFA built from all endpoints | The most specific template wins. Equal ones throw an ambiguous match exception at request time |
+| [httprouter](https://github.com/julienschmidt/httprouter) (Go) | Radix tree | A request matches one route or none, so a static segment and a parameter can't share a position |
+| [axum](https://docs.rs/axum/latest/axum/routing/struct.Router.html) (Rust) | Radix trie, through matchit | A static segment beats a parameter. Any other overlap panics when the app adds the route |
+| [Go `net/http`](https://go.dev/blog/routing-enhancements), since 1.22 | An index over patterns | The most specific pattern wins in any registration order. Two patterns where neither is more specific panic when registered |
+
+- The fast routers avoid testing routes one at a time. They walk a tree, a state machine or a transition table, or match a combined expression.
+- The newer routers stop depending on declaration order. Go and axum rank overlapping patterns by specificity and reject the rest when the app adds them. httprouter allows no overlap at all.
+- FastRoute's author notes that routing is rarely the bottleneck in a typical application.
+
+### A trie for lean-routing's patterns
+
+`TrieBench.lean` builds a segment trie from the same routes. At each node it follows a matching literal, `Nat` capture or `String` capture, and keeps the lowest route index, so it picks the route the scan picks. It then runs that one route through `dispatch`. It agreed with `dispatchTable` on every path the benchmark checked. Times per request, pinned to one CPU, ranges over three runs:
+
+| Routes | Scan, hit on the last route | Trie, hit | Scan, no match | Trie, no match |
+|---|---|---|---|---|
+| 10 | 0.34 to 0.39 µs | 0.43 to 0.53 µs | 0.18 to 0.23 µs | 0.11 to 0.14 µs |
+| 50 | 0.87 to 1.10 µs | 0.44 to 0.49 µs | 0.70 to 0.85 µs | 0.10 to 0.12 µs |
+| 200 | 3.1 to 3.4 µs | 0.44 to 0.47 µs | 2.5 to 2.6 µs | 0.11 to 0.12 µs |
+| 1,000 | 15.4 to 17.5 µs | 0.44 to 0.53 µs | 12.7 to 15.0 µs | 0.10 to 0.13 µs |
+
+### What this means for Espal
+
+- The scan doesn't matter yet. Std.Http spent about 360 µs on a request in the server runs above. The scan adds about 1 percent to that at 200 routes, and 4 percent at 1,000. The HTTP spike's bare Std.Async loop spent 53 µs on a request. On a server that fast, 200 routes would cost about 6 percent.
+- Espal's endpoint layer can give the scan Go's rules. It sorts the routes so that a more specific pattern comes first, and it rejects at compile time two patterns where neither is more specific. Declaration order then stops mattering. Every endpoint stays reachable, since a capture matches infinitely many segments and a table holds finitely many literals.
+- A trie fits Espal's rule for hot paths when it's needed. The scan stays as the reference definition, and a proof shows that the trie picks the same route.
 
 ## Code style
 
