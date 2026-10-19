@@ -1,0 +1,16 @@
+{"version": "1.3.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "https://github.com/paulbutcher/lean-routing",
+   "type": "git",
+   "subDir": null,
+   "scope": "",
+   "rev": "75d8bc32eb9d53bd970d5a97e41f4863b462c614",
+   "name": "routing",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "75d8bc32eb9d53bd970d5a97e41f4863b462c614",
+   "inherited": false,
+   "configFile": "lakefile.lean"}],
+ "name": "«routing-trial»",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}

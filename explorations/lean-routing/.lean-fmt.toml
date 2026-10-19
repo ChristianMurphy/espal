@@ -1,0 +1,2 @@
+# lean-fmt prints a route_table block on one line, so the file that declares them keeps its own layout.
+exclude = ["Trial/Behaviour.lean"]
