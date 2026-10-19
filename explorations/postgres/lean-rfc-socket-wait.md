@@ -13,7 +13,7 @@ It also takes an OS thread per connection, and the blocked tasks keep the proces
 
 A few ways to do this:
 
-1. **A poll handle in `Std.Internal.UV`.** libuv's `uv_poll_t` watches a socket it doesn't own. Lean could wrap it the way it wraps TCP, with a waiter, a way to cancel it and a `Selector`. A wait would then compose with `Selectable.one` and timers. Its docs would repeat libuv's caveats. Readiness can be spurious, each socket can have only one handle, the handle stops before the socket closes, and on Windows it works only with sockets.
+1. **A poll handle in `Std.Internal.UV`.** libuv's `uv_poll_t` watches a socket it doesn't own. Lean could wrap it the way it wraps TCP, with a waiter, a way to cancel it and a `Selector`. A wait would then compose with `Selectable.one` and timers. Its docs would repeat libuv's caveats. Readiness can be spurious, and each socket can have only one handle. The handle has to stop before the socket closes, and on Windows it works only with sockets.
    ```lean
    namespace Std.Internal.UV.Poll
    opaque new (socket : OsSocket) : IO Poll  -- an `int` on Unix, a `SOCKET` on Windows
