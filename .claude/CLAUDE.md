@@ -31,6 +31,7 @@ Reason about Espal's design from its goals in `README.md` and `ROADMAP.md`. Anot
 
 - When they ask to discuss something, answer in chat with the options and trade-offs before changing any file.
 - When a word in a request could mean two things, say which reading you took.
+- The Espal repository is public. Keep an unfixed security finding, in Espal or any other project, out of its files, branches, commit messages, issues and comments. Report it in chat and through the affected project's private channel.
 
 ## Skills
 
