@@ -253,7 +253,7 @@ index 2dc123e..e1311b0 100644
  /-! Typed table creation. Column names, primitive types, and nullability come
  from the same schema used by queries. Constraints refer to that schema.
 diff --git a/LeanLinq/Db.lean b/LeanLinq/Db.lean
-index 686541c..b8acfbb 100644
+index 686541c..b6ba2d4 100644
 --- a/LeanLinq/Db.lean
 +++ b/LeanLinq/Db.lean
 @@ -1,8 +1,13 @@
@@ -275,6 +275,33 @@ index 686541c..b8acfbb 100644
  
  /-! # `Db` — database programs with the round-trip bill in the type
  
+@@ -272,7 +277,7 @@ defs, `gcard`'s recursion, the pointwise constructors — unfolded by
+ defeq). The rewrite carries no proof: every step is `rfl`. -/
+ 
+ open Lean Meta in
+-private partial def gradeNatNorm (e : Expr) : MetaM Expr := do
++private meta partial def gradeNatNorm (e : Expr) : MetaM Expr := do
+   let e ← whnfCore e
+   let f := e.getAppFn
+   let some n := f.constName? | return e
+@@ -1231,7 +1236,7 @@ open Lean in
+ /-- `let ys ← for x in xs do body` also parses as plain `let ys ← term`
+ (term-position `for`), so the parser emits a `choice` node — resolve it
+ in favor of the dedicated loop clause. -/
+-def resolveClause (c : Syntax) : Syntax :=
++meta def resolveClause (c : Syntax) : Syntax :=
+   if c.getKind == Lean.choiceKind then
+     (c.getArgs.find? (·.isOfKind ``fetchForAll)).getD c[0]
+   else c
+@@ -1246,7 +1251,7 @@ priced by the fetch's own contract (`k * q.gcard`). The binder spelling
+ is the syntactic marker; `x`'s binder disappears, so any other use of
+ `x` is an unknown-identifier error (fetch it separately if you need the
+ rows too). -/
+-private partial def fuseBoundedLoops : List Syntax → MacroM (List Syntax)
++private meta partial def fuseBoundedLoops : List Syntax → MacroM (List Syntax)
+   | [] => return []
+   | [c] => return [c]
+   | c1 :: c2 :: rest => do
 @@ -1269,7 +1274,7 @@ a constant continuation bill. A generic helper's mode remains generic. -/
  syntax (name := defaultDbMode) "db_mode% " term : term
  
@@ -575,13 +602,14 @@ index d2f13bb..b72be60 100644
    let perRho ← match expectedType? with
      | some exp => do
 diff --git a/LeanLinq/Theorems.lean b/LeanLinq/Theorems.lean
-index 3263967..1e0b99d 100644
+index 3263967..b10c304 100644
 --- a/LeanLinq/Theorems.lean
 +++ b/LeanLinq/Theorems.lean
-@@ -1,4 +1,9 @@
+@@ -1,4 +1,10 @@
 -import LeanLinq.Eval.Query
 +module
 +
++import all Init.Data.List.Control
 +public import LeanLinq.Eval.Query
 +
 +@[expose] public section
@@ -590,16 +618,14 @@ index 3263967..1e0b99d 100644
  /-! # Theorems about the executable semantics
  
 diff --git a/lakefile.lean b/lakefile.lean
-index 8241831..2f32152 100644
+index 8241831..da8bcfe 100644
 --- a/lakefile.lean
 +++ b/lakefile.lean
-@@ -106,7 +106,8 @@ package «lean-linq» where
+@@ -103,6 +103,7 @@ package «lean-linq» where
+   homepage := "https://github.com/palladin/lean-linq"
+   license := "MIT"
+   testDriver := "tests"
++  leanOptions := #[⟨`backward.privateInPublic, true⟩]
    moreLinkArgs := dbLinkArgs%
  
  @[default_target]
--lean_lib LeanLinq
-+lean_lib LeanLinq where
-+  leanOptions := #[⟨`backward.privateInPublic, true⟩]
- 
- -- default target so `lake build` (and CI) type-checks the demos — an
- -- undeclared demo file can silently rot otherwise
