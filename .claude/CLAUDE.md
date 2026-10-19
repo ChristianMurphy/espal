@@ -10,20 +10,33 @@ Follow the code style in `CONTRIBUTING.md`. In short:
 
 Keep agent instructions in `.claude/`. Don't put them in `CONTRIBUTING.md` or other files written for people.
 
+Reason about Espal's design from its goals in `README.md` and `ROADMAP.md`. Another project's conventions decide how to approach that project, and they don't decide what Espal needs.
+
 ## Writing
 
 - Scan all text meant for people with Vale, using the AiTells and Voices styles, and with LanguageTool. That covers docs, design notes, commit messages, issues, pull requests and chat posts. Then reread it, since neither catches everything.
+- Neither tool catches a figure of speech such as "pays for it twice". Say what happens instead, and run a humanize pass if your setup has one.
+- Vale reads a sentence that ends in a version number, such as 4.36.0, as running into the next one. Rephrase to clear that length error.
 - Use concrete verbs, and name the concrete fact, such as the error, the file or what breaks. Words such as "there" or "carry over" that stand in for a fact leave the reader guessing.
 - Avoid stock phrases and inflated claims. State design goals as goals.
 - Keep sentences under about 25 words. Write plain sentences rather than a colon before the point.
 - State the claim directly. Skip contrasts that set it against something weaker, such as "X, not only Y" or "X rather than just Y".
 - Check each claim before you write it, and say which checks ran and passed.
+- Offer only what you've checked or tried. Don't promise work you haven't attempted, such as a proof.
+- Keep it short. Give the reader what they need to decide, and put the rest behind a link, such as a results page.
+- When comparing options, say how each one works and when it wins before giving numbers. A table alone leaves the reader to work out the trade-off.
 - Refer to milestones and properties by name, with a link, rather than by a code such as M1.
+
+## Working with the person
+
+- When they ask to discuss something, answer in chat with the options and trade-offs before changing any file.
+- When a word in a request could mean two things, say which reading you took.
 
 ## Skills
 
 - `writing-to-other-projects` covers issues, pull requests and posts for projects other than Espal.
 - `c-libraries` covers Lean dependencies, C bindings and linking.
+- `benchmarks` covers running benchmarks and reporting their results.
 
 ## Commits
 
