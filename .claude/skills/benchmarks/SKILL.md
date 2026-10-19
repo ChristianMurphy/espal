@@ -11,7 +11,7 @@ description: Run benchmarks for Espal, its spikes and its candidate dependencies
 - Write each baseline the way its own documentation recommends, such as FastAPI handlers with `async def`. A badly tuned baseline makes the comparison worthless.
 - A shared VM drifts between runs. One server's peak varied by a factor of two in the runtime comparison. Repeat runs in sets, alternate the variants within each set, and compare variants only within a set.
 - Check where the process runs. Threaded Ruby and Python servers ran about twice as fast pinned to one CPU as spread over two.
-- Before timing alternatives, check that they give the same results, as `TrieBench.lean` checks each index against `dispatchTable`.
+- Before timing alternatives, check that they give the same results on every kind of input the real code sees. The trie prototype checked `GET` routes only, and missed that it skipped a later route with the right method.
 - Look over a prototype for avoidable work before ranking it. Skipping needless parsing moved the trie from nearly twice the index's time to within 0.1 µs of it.
 
 ## Reporting
