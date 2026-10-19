@@ -6,6 +6,7 @@ This trial checks [lean-routing](https://github.com/paulbutcher/lean-routing) as
 
 - `Trial/Behaviour.lean` checks each claim below that mentions a path, with `#guard`.
 - `DispatchBench.lean` times dispatch with many routes.
+- `upstream/` holds the changes to offer lean-routing, as patches, with how realistic each one is.
 
 ## Running it
 
@@ -34,7 +35,7 @@ Its tests also check that an executable using its macros links nothing from the 
 
 ## Against Espal's route properties
 
-- **Round trip.** A theorem shows that the pattern syntax round-trips (`parsePattern_renderPattern`). The round trip from a link back to its route has examples and Plausible fuzzing but no theorem. Its tests give the reason: `String.splitOn` and `String.toNat?` have no lemmas in Lean's core. `Espal.Route` already proves a decimal codec round trip (`parseNatSeg_natSeg`) that could replace `String.toNat?`.
+- **Round trip.** A theorem shows that the pattern syntax round-trips (`parsePattern_renderPattern`). The round trip from a link back to its route has examples and Plausible fuzzing but no theorem. Its tests give the reason: `String.splitOn` and `String.toNat?` had no lemmas in Lean's core. Lean 4.35.0 proves `Nat.toNat?_repr`, which `upstream/0001` uses for that proof. `Espal.Route` already proves a decimal codec round trip (`parseNatSeg_natSeg`) that could replace `String.toNat?`.
 - **One URL per resource.** A `Nat` capture parses with `String.toNat?`, which accepts leading zeros and `_` separators. `/users/42`, `/users/0042` and `/users/4_2` all reach user 42. The [route round trip](../../ROADMAP.md#route-round-trip) property rules that out.
 - **Reachability.** Dispatch takes the first route that matches. Listed first, `/users/:name:String` takes both `/users/new` and `/users/42`, so the routes for those paths never run. Nothing reports it. `route_table` also accepts two rows with the same pattern. Under [every endpoint is reachable](../../ROADMAP.md#every-endpoint-is-reachable), each of these fails to compile.
 - **Capture types.** A capture is a `Nat` or a `String`, from a closed inductive type. Espal also needs signed integers, UUIDs and enumerations.
@@ -68,5 +69,5 @@ lean-fmt prints each `route_table` block on one line, such as `route_table App[u
 ## Options
 
 1. **Keep it as it is.** Espal depends on lean-routing and accepts a link round trip that tests cover, more than one URL per number, and silent shadowing.
-2. **Adapt it, upstream first.** Espal depends on lean-routing and offers each change upstream on its own. One change gives a `Nat` capture one spelling per number. Others prove the link round trip, let a codec class with a round-trip proof add capture types, and move the theorems into the library. Espal's endpoint layer adds the reachability check, endpoints and OpenAPI on top of `Route`.
+2. **Adapt it, upstream first.** Espal depends on lean-routing and offers each change upstream on its own, as `upstream/` lists. Espal's endpoint layer adds the reachability check, endpoints and OpenAPI on top of `Route`.
 3. **Replace it.** Espal ports its prototype's `route_type` and `api` macros, and borrows lean-routing's rules for dot segments and encoding with its notice.

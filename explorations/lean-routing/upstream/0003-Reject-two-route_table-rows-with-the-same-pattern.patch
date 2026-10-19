@@ -1,0 +1,58 @@
+From 2149c1c3789ac3ba8651c76a60731a5ca8e4926f Mon Sep 17 00:00:00 2001
+From: Christian Murphy <christian.murphy.42@gmail.com>
+Date: Mon, 19 Oct 2026 02:53:54 +0000
+Subject: [PATCH] Reject two route_table rows with the same pattern
+
+Two rows whose patterns differ only in capture names match the same paths, so dispatch never reaches the later one. route_table now rejects the second row at compile time, as it already does for a repeated name.
+
+Signed-off-by: Christian Murphy <christian.murphy.42@gmail.com>
+---
+ Routing/RouteTable.lean           | 10 ++++++++++
+ test/RoutingTests/RouteTable.lean | 10 ++++++++++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/Routing/RouteTable.lean b/Routing/RouteTable.lean
+index d4b5b34..ace235c 100644
+--- a/Routing/RouteTable.lean
++++ b/Routing/RouteTable.lean
+@@ -253,6 +253,16 @@ elab_rules : command
+         throwErrorAt name s!"route name '{name.getId}' already declared at {prior}"
+       seen := seen.insert name.getId name
+ 
++    -- Reject a pattern another row already matches; capture names don't change what matches.
++    let mut seenPatterns : Std.HashMap String String := {}
++    for (_, kind) in entries do
++      if let .leaf pat := kind then
++        let segs ← parseSegsOrThrow pat
++        let key := renderPattern (segs.map fun | .capture _ k => .capture "" k | seg => seg)
++        if let some prior := seenPatterns[key]? then
++          throwErrorAt pat s!"route pattern {pat.getString.quote} matches the same paths as {prior.quote}"
++        seenPatterns := seenPatterns.insert key pat.getString
++
+     -- Compute each row's field type/value source once here (`rowGenFor`), reused below by both
+     -- `Patterns` (3/4) and `Links` (5/6), rather than each recomputing it separately.
+     let env ← getEnv
+diff --git a/test/RoutingTests/RouteTable.lean b/test/RoutingTests/RouteTable.lean
+index 304e93e..097084f 100644
+--- a/test/RoutingTests/RouteTable.lean
++++ b/test/RoutingTests/RouteTable.lean
+@@ -37,6 +37,16 @@ route_table RouteTableTestDup
+   [ index := "/",
+     index := "/elsewhere" ]
+ 
++-- Negative-compile regression: two rows whose patterns differ only in capture names would leave
++-- the later one unreachable.
++/--
++error: route pattern "/todos/:n:Nat" matches the same paths as "/todos/:id:Nat"
++-/
++#guard_msgs in
++route_table RouteTableTestSamePattern
++  [ first := "/todos/:id:Nat",
++    second := "/todos/:n:Nat" ]
++
+ -- Negative-compile regression: a malformed pattern string is a command-time error at the row
+ -- that declares it (`segsSrcFor`, `RouteTable.lean`), not a silently-accepted bad route.
+ /--
+-- 
+2.43.0
+

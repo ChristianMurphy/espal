@@ -1,0 +1,113 @@
+From 49db1bf040135f0f80445dbdc5fde287d0243b80 Mon Sep 17 00:00:00 2001
+From: Christian Murphy <christian.murphy.42@gmail.com>
+Date: Mon, 19 Oct 2026 02:53:03 +0000
+Subject: [PATCH] Match only the digits a link renders in a Nat capture
+
+String.toNat? accepts leading zeros and "_" separators, so /users/042 and /users/4_2 both reached user 42. A Nat capture now matches only what toString prints, as a String capture already refuses segments no link can carry. parseNat?_toString and toString_of_parseNat? prove both directions.
+
+This changes behaviour for every consumer. A request for /users/042 now gets a 404.
+
+Signed-off-by: Christian Murphy <christian.murphy.42@gmail.com>
+---
+ README.md                        |  3 ++-
+ Routing/Handler.lean             |  7 ++++++-
+ test/RoutingTests/Handler.lean   |  2 ++
+ test/RoutingTests/RoundTrip.lean | 16 +++++++++++++++-
+ 4 files changed, 25 insertions(+), 3 deletions(-)
+
+diff --git a/README.md b/README.md
+index 8ab2080..637850e 100644
+--- a/README.md
++++ b/README.md
+@@ -64,7 +64,7 @@ Use `AppName.links.<name>` anywhere you need a URL for one of your routes, e.g.
+ #eval AppName.links.user 42     -- "/users/42"
+ ```
+ 
+-`AppName.links.user` is a function (`Nat → String`) because its pattern has one capture; a pattern with no captures gives a plain `String`. Literal segments and `String` captures are percent-encoded, so `AppName.links.userPost 1 "a b/c"` is `"/users/1/posts/a%20b%2Fc"`, which dispatches back to `"a b/c"`. No link can carry an empty, `.` or `..` segment, so a pattern cannot contain a `.` or `..` literal (`PathSeg.lit` requires a proof, and `PathSeg.lit?` checks a runtime string) and a `String` capture never matches any of the three; validate such values (usernames, say) where they are created.
++`AppName.links.user` is a function (`Nat → String`) because its pattern has one capture; a pattern with no captures gives a plain `String`. Literal segments and `String` captures are percent-encoded, so `AppName.links.userPost 1 "a b/c"` is `"/users/1/posts/a%20b%2Fc"`, which dispatches back to `"a b/c"`. A `Nat` capture matches only the digits a link renders, so `/users/042` is not a second path to user 42. No link can carry an empty, `.` or `..` segment, so a pattern cannot contain a `.` or `..` literal (`PathSeg.lit` requires a proof, and `PathSeg.lit?` checks a runtime string) and a `String` capture never matches any of the three; validate such values (usernames, say) where they are created.
+ 
+ ### Hierarchical routes
+ 
+@@ -170,6 +170,7 @@ Linking to a strict descendant of the current page needs its own segment repeate
+ 
+ - Pattern round trip ([test/RoutingTests/Pattern.lean](test/RoutingTests/Pattern.lean), `parsePattern_renderPattern`): rendering a list of well-formed segments to a pattern string and parsing it back recovers exactly those segments.
+ - Link round trip ([test/RoutingTests/RoundTrip.lean](test/RoutingTests/RoundTrip.lean), `dispatch_pathOf`, `applyLink_linkFor`): a link is its encoded segments joined by `/`, and dispatching those segments, decoded, calls the handler with the values the link was built from.
++- One path per number ([test/RoutingTests/RoundTrip.lean](test/RoutingTests/RoundTrip.lean), `parseNat?_toString`, `toString_of_parseNat?`): a `Nat` capture matches exactly the digits `toString` prints.
+ - Template stability ([test/RoutingTests/Pattern.lean](test/RoutingTests/Pattern.lean), `renderTemplate_kind_invariant`): changing a capture's kind leaves the endpoint template that `matchedPattern?` reports unchanged, so telemetry grouped by route survives `:id:Nat` becoming `:id:String`.
+ - Router mounts ([test/RoutingTests/Router.lean](test/RoutingTests/Router.lean), `Route.under_segs`): a route under a `Router` mount has exactly the pattern a `route_table` mount gives it, so it matches what the table's links point at.
+ - Mount-prefix cancellation ([test/RoutingTests/RelativeLink.lean](test/RoutingTests/RelativeLink.lean), `relativeSegments_prefix`): a prefix shared by both endpoints drops out of a relative link, so a module's self-links are the same wherever it is mounted.
+diff --git a/Routing/Handler.lean b/Routing/Handler.lean
+index 07785e6..2cef7e2 100644
+--- a/Routing/Handler.lean
++++ b/Routing/Handler.lean
+@@ -21,6 +21,11 @@ def HandlerType (segs : List PathSeg) (result : Type) : Type :=
+   | .lit _ _ :: rest => HandlerType rest result
+   | .capture _ kind :: rest => kind.type → HandlerType rest result
+ 
++/-- A `Nat` capture's value, accepting only the digits `toString` prints, so each number has one
++path. -/
++def parseNat? (s : String) : Option Nat :=
++  s.toNat?.filter (toString · == s)
++
+ /-- The `String` captures no link can carry as one path segment: a `dotSegment`, or an empty one,
+ which many proxies collapse and which, as the last segment, cannot be told from a trailing slash. -/
+ def unlinkable (s : String) : Bool :=
+@@ -43,7 +48,7 @@ def dispatch {result : Type} :
+   | [], h, [] => some h
+   | [], h, [""] => some h
+   | .lit s _ :: rest, h, p :: ps => if s == p then dispatch rest h ps else none
+-  | .capture _ .nat :: rest, h, p :: ps => p.toNat?.bind (fun n => dispatch rest (h n) ps)
++  | .capture _ .nat :: rest, h, p :: ps => (parseNat? p).bind (fun n => dispatch rest (h n) ps)
+   | .capture _ .string :: rest, h, p :: ps =>
+     if unlinkable p then none else dispatch rest (h p) ps
+   | _, _, _ => none
+diff --git a/test/RoutingTests/Handler.lean b/test/RoutingTests/Handler.lean
+index 490700b..ceea8ef 100644
+--- a/test/RoutingTests/Handler.lean
++++ b/test/RoutingTests/Handler.lean
+@@ -16,6 +16,8 @@ private def userHandler : HandlerType userPattern String :=
+ 
+ #guard dispatch userPattern userHandler ["users", "42"] = some "user #42"
+ #guard dispatch userPattern userHandler ["users", "notanumber"] = none
++#guard dispatch userPattern userHandler ["users", "042"] = none       -- only the digits a link renders
++#guard dispatch userPattern userHandler ["users", "4_2"] = none
+ #guard dispatch userPattern userHandler ["posts", "42"] = none          -- literal mismatch
+ #guard dispatch userPattern userHandler ["users"] = none                -- too few path segments
+ #guard dispatch userPattern userHandler ["users", "42", "extra"] = none -- too many path segments
+diff --git a/test/RoutingTests/RoundTrip.lean b/test/RoutingTests/RoundTrip.lean
+index 49996bc..ecc626c 100644
+--- a/test/RoutingTests/RoundTrip.lean
++++ b/test/RoutingTests/RoundTrip.lean
+@@ -9,6 +9,20 @@ import Std.Data.String.ToNat
+ 
+ namespace Routing
+ 
++/-- A `Nat` capture matches the digits a link renders for it. -/
++theorem parseNat?_toString (n : Nat) : parseNat? (toString n) = some n := by
++  simp [parseNat?, Option.filter, toString, Nat.toNat?_repr]
++
++/-- A `Nat` capture matches nothing else, so each number has one path. -/
++theorem toString_of_parseNat? {s : String} {n : Nat} (h : parseNat? s = some n) :
++    toString n = s := by
++  unfold parseNat? Option.filter at h
++  split at h
++  · split at h
++    · cases h; simp_all
++    · cases h
++  · cases h
++
+ /-- One value per capture in `segs`, in order. -/
+ def Args : List PathSeg → Type
+   | [] => Unit
+@@ -49,7 +63,7 @@ theorem dispatch_pathOf : ∀ (segs : List PathSeg) (h : HandlerType segs r) (ar
+     simp only [pathOf, dispatch, BEq.rfl, ite_true, applyHandler]
+     exact dispatch_pathOf rest h args hl
+   | .capture _ .nat :: rest, h, (n, args), hl => by
+-    simp only [pathOf, dispatch, toString, Nat.toNat?_repr, Option.bind_some, applyHandler]
++    simp only [pathOf, dispatch, parseNat?_toString, Option.bind_some, applyHandler]
+     exact dispatch_pathOf rest (h n) args hl
+   | .capture _ .string :: rest, h, (s, args), ⟨hs, hl⟩ => by
+     simp only [pathOf, dispatch, hs, Bool.false_eq_true, ite_false, applyHandler]
+-- 
+2.43.0
+

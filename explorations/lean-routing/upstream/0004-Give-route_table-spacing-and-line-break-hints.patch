@@ -1,0 +1,43 @@
+From 5f615b1fb6fb4a6c65a076418669e3be900c137f Mon Sep 17 00:00:00 2001
+From: Christian Murphy <christian.murphy.42@gmail.com>
+Date: Mon, 19 Oct 2026 02:54:19 +0000
+Subject: [PATCH] Give route_table spacing and line-break hints
+
+Lean's pretty-printer, and formatters built on it such as lean-fmt, printed a table as route_table App[index:="/", user:="/users/:id:Nat"]. The syntax now asks for spaces around ":=" and a line break after each row.
+
+Signed-off-by: Christian Murphy <christian.murphy.42@gmail.com>
+---
+ Routing/RouteTable.lean | 11 ++++++-----
+ 1 file changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/Routing/RouteTable.lean b/Routing/RouteTable.lean
+index d4b5b34..99d90e8 100644
+--- a/Routing/RouteTable.lean
++++ b/Routing/RouteTable.lean
+@@ -47,17 +47,18 @@ namespace Routing
+ open Lean Lean.Elab Lean.Elab.Command
+ 
+ declare_syntax_cat routeTableRow
+-syntax ident ":=" str : routeTableRow
+-syntax ident ":=" "mount" str ident : routeTableRow
++syntax ident " := " str : routeTableRow
++syntax ident " := " "mount " str ppSpace ident : routeTableRow
+ 
+ /-- Factored out into its own named parser, rather than inlined into `routeTableCmd` below, because
+ the `,*,?` trailing-comma sugar only elaborates inside a `syntax name := ...` alias. Same shape core
+-uses for `rwRuleSeq` (`Init/Tactics.lean`). -/
+-syntax routeTableRows := "[" withoutPosition(routeTableRow,*,?) "]"
++uses for `rwRuleSeq` (`Init/Tactics.lean`). The sugar is spelled out as `sepBy` so that a printed
++table puts each row on its own line. -/
++syntax routeTableRows := "[" ppIndent(withoutPosition(sepBy(routeTableRow, ",", ", " ppLine, allowTrailingSep))) "]"
+ 
+ /-- See the module docstring. `App` names the generated `App.Patterns`/`App.patterns`/
+ `App.Links`/`App.links` declarations. -/
+-syntax (name := routeTableCmd) "route_table" ident routeTableRows : command
++syntax (name := routeTableCmd) "route_table " ident ppSpace routeTableRows : command
+ 
+ /-- A row is either a plain pattern (`.leaf`) or a mount of another app's whole table under a
+ literal prefix (`.mount`). -/
+-- 
+2.43.0
+
