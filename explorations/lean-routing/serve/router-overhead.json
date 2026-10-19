@@ -1,0 +1,86 @@
+[
+ {
+  "round": 1,
+  "variant": "bare",
+  "peak_rps": 5962.782511205263,
+  "cpu_us_per_request": 358.53585358535855,
+  "p99_ms_at_rate": 3.46796
+ },
+ {
+  "round": 1,
+  "variant": "table-2",
+  "peak_rps": 6150.636214036209,
+  "cpu_us_per_request": 362.5362536253625,
+  "p99_ms_at_rate": 4.973718
+ },
+ {
+  "round": 1,
+  "variant": "table-200",
+  "peak_rps": 6194.965282488776,
+  "cpu_us_per_request": 384.50000000000006,
+  "p99_ms_at_rate": 7.61883
+ },
+ {
+  "round": 1,
+  "variant": "router-200",
+  "peak_rps": 6062.027673931756,
+  "cpu_us_per_request": 361.0180509025451,
+  "p99_ms_at_rate": 3.28651
+ },
+ {
+  "round": 2,
+  "variant": "bare",
+  "peak_rps": 5972.997322732697,
+  "cpu_us_per_request": 361.10833249974996,
+  "p99_ms_at_rate": 3.134727
+ },
+ {
+  "round": 2,
+  "variant": "table-2",
+  "peak_rps": 6317.71483154661,
+  "cpu_us_per_request": 336.51682584129196,
+  "p99_ms_at_rate": 2.4922389999999996
+ },
+ {
+  "round": 2,
+  "variant": "table-200",
+  "peak_rps": 6696.367813707606,
+  "cpu_us_per_request": 371.53715371537163,
+  "p99_ms_at_rate": 5.216478
+ },
+ {
+  "round": 2,
+  "variant": "router-200",
+  "peak_rps": 6023.116051302611,
+  "cpu_us_per_request": 371.037103710371,
+  "p99_ms_at_rate": 3.492302
+ },
+ {
+  "round": 3,
+  "variant": "bare",
+  "peak_rps": 6368.595624677807,
+  "cpu_us_per_request": 369.50000000000006,
+  "p99_ms_at_rate": 3.738135
+ },
+ {
+  "round": 3,
+  "variant": "table-2",
+  "peak_rps": 6134.3785395940895,
+  "cpu_us_per_request": 343.00000000000006,
+  "p99_ms_at_rate": 3.583511
+ },
+ {
+  "round": 3,
+  "variant": "table-200",
+  "peak_rps": 5762.7482951277525,
+  "cpu_us_per_request": 374.49999999999994,
+  "p99_ms_at_rate": 3.5856920000000003
+ },
+ {
+  "round": 3,
+  "variant": "router-200",
+  "peak_rps": 6048.711335891024,
+  "cpu_us_per_request": 360.5180259012951,
+  "p99_ms_at_rate": 3.1883380000000003
+ }
+]

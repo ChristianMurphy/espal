@@ -6,6 +6,7 @@ This trial checks [lean-routing](https://github.com/paulbutcher/lean-routing) as
 
 - `Trial/Behaviour.lean` checks each claim below that mentions a path, with `#guard`.
 - `DispatchBench.lean` times dispatch with many routes.
+- `serve/` runs Std.Http on Lean 4.36.0-rc1 with and without lean-routing, and `serve/bench_router.py` compares them.
 - `upstream/` holds the changes to offer lean-routing, as patches, with how realistic each one is.
 
 ## Running it
@@ -53,6 +54,21 @@ An Espal endpoint declares its method and path. It also declares parameters, a b
 ## Dispatch cost
 
 Dispatch tries each route in order. Pinned to one CPU, `dispatch-bench` reached the last of 200 routes in 3.1 µs. Std.Http spent about 540 µs of CPU per request in the [HTTP spike](../../bench/results/http/2026-10-18-cloud-4vcpu/README.md), so the scan adds under 1 percent.
+
+## Overhead in a server
+
+`serve/bench_router.py` ran four handlers in one Std.Http server on Lean 4.36.0-rc1, pinned to one CPU, for three alternating rounds. Each answered `/plaintext`.
+
+| Handler | Peak req/s, median | CPU per request at 2,000 req/s, median |
+|---|---|---|
+| String match on the URI, as in the HTTP spike | 5,973 | 361 µs |
+| `toHandler` with 2 routes | 6,151 | 343 µs |
+| `toHandler` with 200 routes, `/plaintext` last | 6,195 | 375 µs |
+| `Router` with 200 routes and two middlewares | 6,049 | 361 µs |
+
+- The medians spread by 4 percent in peak and 9 percent in CPU, in no consistent order. The 200-route `Router` used as much CPU as the bare handler, so the spread is noise. The 3.1 µs that `dispatch-bench` measured for 200 routes is under 1 percent of a request.
+- A request that matches nothing scans the routes twice, the second time to see whether a trailing slash would match. A `Router` also asks each sub-router. With 200 routes that still comes to a few microseconds.
+- Std.Http's own work takes almost all of a request's CPU time.
 
 ## Code style
 
