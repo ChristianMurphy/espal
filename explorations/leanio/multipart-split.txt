@@ -1,0 +1,10 @@
+mixed, whole body: [field title="Hello multipart world", file doc a.txt "file body line 1\x0d\nline 2", field note="second field"]
+split at 8: []
+chunks of 1: []
+headers whole, then chunks of 1: [field title=""]
+mixed: 456 of 776 splits differ from the whole body
+file only, whole body: [file doc a.txt "file body line 1\x0d\nline 2"]
+split at 8: []
+chunks of 1: []
+headers whole, then chunks of 1: [file doc a.txt "file body line 1\x0d\nline 2\x0d\n--XyZ--\x0d\n"]
+file only: 139 of 244 splits differ from the whole body

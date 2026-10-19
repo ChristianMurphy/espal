@@ -1,0 +1,7 @@
+at start: VmHWM: 71928 kB
+text field of 100 bytes arrived as 100 bytes
+text field of 20000 bytes arrived as 3913 bytes
+text field of 200000 bytes arrived as 6562 bytes
+text field of 50000000 bytes arrived as 3298 bytes
+200 MB file: sent 2966a2e969370ecb, saved 2966a2e969370ecb
+at end: VmHWM: 78196 kB

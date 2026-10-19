@@ -82,23 +82,23 @@ def check (verbose : Bool) (name : String) (body : ByteArray) : IO Nat := do
   let whole ← parseWith [body]
   IO.println s!"{name}, whole body: {showAll whole}"
   let mut bad := 0
-  let mut shown := 0
-  let mut cases : List (String × List ByteArray) := []
+  let mut shown : List String := []
+  let mut cases : List (String × String × List ByteArray) := []
   for k in [1:body.size] do
-    cases := (s!"split at {k}", [body.extract 0 k, body.extract k body.size]) :: cases
+    cases := ("split at", s!"{k}", [body.extract 0 k, body.extract k body.size]) :: cases
   for n in [1:body.size] do
-    cases := (s!"chunks of {n}", splitEvery body n) :: cases
+    cases := ("chunks of", s!"{n}", splitEvery body n) :: cases
   if let some h := headerEnd? body then
     for n in [1:body.size - h] do
-      cases := (s!"headers whole, then chunks of {n}",
+      cases := ("headers whole, then chunks of", s!"{n}",
         body.extract 0 h :: splitEvery (body.extract h body.size) n) :: cases
-  for (label, chunks) in cases.reverse do
+  for (kind, size, chunks) in cases.reverse do
     let got ← parseWith chunks
     if got != whole then
       bad := bad + 1
-      if verbose || shown < 4 then
-        shown := shown + 1
-        IO.println s!"{label}: {showAll got}"
+      if verbose || !shown.contains kind then
+        shown := kind :: shown
+        IO.println s!"{kind} {size}: {showAll got}"
   IO.println s!"{name}: {bad} of {cases.length} splits differ from the whole body"
   return bad
 
