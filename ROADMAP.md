@@ -117,7 +117,7 @@ Each property names the evidence behind it, using the kinds above.
 
 | Property | Evidence |
 |---|---|
-| [Route round trip](#route-round-trip) | Proved |
+| [Route round trip](#route-round-trip) | Proved, with one URL per resource Enforced |
 | [Every endpoint is reachable](#every-endpoint-is-reachable) | Proved at compile time |
 | [Client and server agree](#client-and-server-agree) | Proved for the Lean client, Tested for TypeScript |
 | [No SQL injection](#no-sql-injection) | Proved |
@@ -143,9 +143,9 @@ Each property names the evidence behind it, using the kinds above.
 
 ### Route round trip
 
-For every route value, `ofPath (toPath r) = some r`. `Espal.Route` proves this for the decimal codec today.
+A link built from a route's parameters dispatches back to that route with the same parameters. The theorem covers the path as segments, and [client and server agreement](#client-and-server-agree) uses it as a lemma. Espal proves it over lean-routing's `dispatch` and `linkFor`. A prototype of the proof took about 90 lines, with `Nat.toNat?_repr` from Lean's standard library.
 
-The converse is missing. The parser accepts leading zeros, so `/users/007` and `/users/7` reach the same route, and one resource has two URLs. Cache keys and path-based rules can then disagree. We prove that `toPath` inverts `ofPath` on canonical paths, and answer other paths with a redirect or a 404.
+Each resource gets one URL. lean-routing reaches user 42 at `/users/042`, `/users/4_2` and `/users/%34%32` as well as `/users/42`. Espal rebuilds the link from the captured values, compares it with the request's encoded path, and redirects when they differ. That check at run time also covers percent-encoding, which a proof about the parser can't reach.
 
 The proof assumes the HTTP layer passes the path through unchanged. Percent-decoding, `..`, doubled or trailing slashes, and a proxy that rewrites paths all happen outside it. A test sends each of these cases through the real server.
 
@@ -422,7 +422,7 @@ Here we pick the HTTP layer, the Postgres client and the libraries we keep. We a
   - The libpq server links 24 shared libraries at run time, among them OpenSSL, Kerberos and LDAP.
 - **Dependency spikes.** We build each candidate on Espal's toolchain, measure it against what Espal needs, and write down whether we keep or replace it. The candidates pin Lean versions from 4.33 to 4.35 today.
   - lean-linq (MIT) as the query layer (done). Espal builds on its core with its own Postgres client, and sends changes upstream first. It passed its tests on Lean 4.35.0 and 4.36.0-rc1, and its budgets close most gaps in the [statement budget](#statement-budget). A module can't import it yet, its warnings fail `--wfail`, and its build needs all four client libraries. Moving its MySQL driver to MariaDB Connector/C took four changed lines. The [decision note](docs/design/lean-linq.md) lists what has to change upstream.
-  - lean-routing (Apache 2.0) as the router (done). Espal builds its routes on it and sends changes upstream first. On Lean 4.35.0 and 4.36.0-rc1 it built with no warnings and passed its tests. A `Nat` capture accepts several spellings of one number, and its link round trip has tests but no proof. The [decision note](docs/design/lean-routing.md) lists what has to change upstream.
+  - lean-routing (Apache 2.0) as the router (done). Espal builds its routes on it as it is. On Lean 4.35.0 and 4.36.0-rc1 it built with no warnings and passed its tests. Espal adds the link round-trip proof, a reachability check, and a redirect to each resource's one URL. The [decision note](docs/design/lean-routing.md) has the details.
   - LeanIO (MIT) for typed extractors, streamed multipart uploads, ranges and ETags. It has almost no proofs and uses `partial def`, so it would sit outside the totality lint, and the route report would say so.
   - cedar-lean (Apache 2.0) as the permission engine, with the proofs described under [every endpoint checks permission](#every-endpoint-checks-permission).
 - **Exit.** Numbers in `bench/results/` with the hardware recorded, a written decision for HTTP, Postgres and each dependency, and fixed targets in the table below.
@@ -599,7 +599,7 @@ These came out of the planning discussion in October 2026.
 - **Contracts.** One prototype with `vcgen` in the query layer milestone before committing.
 - **Candidate dependencies.** lean-linq, lean-routing, LeanIO and cedar-lean, each evaluated during the spikes.
 - **Query core.** lean-linq's core, run by Espal's own Postgres client. Changes go upstream first, and a copy with its MIT notice is the fallback.
-- **Router.** lean-routing, with Espal's endpoints and reachability check on top. Changes go upstream first, and a copy with its Apache 2.0 notice is the fallback.
+- **Router.** lean-routing as it is, with Espal's endpoints, reachability check and canonical-path redirect on top. A copy with its Apache 2.0 notice is the fallback.
 - **Tenant app.** A QTI-shaped grading app, without XML import at first.
 - **Load target.** 100,000 submissions within one minute at the end of an exam.
 - **Databases in 0.1.** Postgres only.
