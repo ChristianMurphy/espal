@@ -10,7 +10,7 @@ Each patch applies on commit `75d8bc3`, except `0002`, which applies on top of `
 | `0004` | Spacing and line-break hints for `route_table` | 6 lines | Printed tables keep one row per line |
 | `0005` | An issue asking about matching routes with a trie, opened as [#8](https://github.com/paulbutcher/lean-routing/issues/8) | An issue, with a prototype | Nothing until a pull request lands |
 | `0006` | An issue about links to another host from a mount root that starts with an empty segment, opened as [#9](https://github.com/paulbutcher/lean-routing/issues/9) | An issue | Nothing until a fix lands |
-| `0007` | Match requests with a trie, for issue #8, described in `0007-description.md` | 77 lines of library code and 253 lines of proof | Matching no longer slows as a table grows; `respond?`, `wantsSlash` and `slashRedirect?` take a `RouteIndex` |
+| `0007` | Match requests with a trie, for issue #8, described in `0007-description.md` | 92 lines of library code and 308 lines of proof | Matching no longer slows as a table grows |
 
 ## How realistic each one is
 
