@@ -56,8 +56,6 @@ Espal aims to be fast enough for production APIs. The fixes in Lean 4.36.0-rc1 l
 
 `Espal.Route` provides typed routes and a decimal path codec with a proved round trip. A prototype proved statement budgets, tenant scoping, SQL injection safety, HTML escaping and client agreement. Everything else in this README describes plans for 0.1, and [ROADMAP.md](ROADMAP.md) tracks the work.
 
-The name is short for espalier, a tree trained along a frame as it grows.
-
 ## Building
 
 Espal uses [Lake](https://github.com/leanprover/lean4/tree/master/src/lake) and the Lean version pinned in `lean-toolchain`.
@@ -66,6 +64,16 @@ Espal uses [Lake](https://github.com/leanprover/lean4/tree/master/src/lake) and 
 lake build      # library
 lake test       # tests
 ```
+
+## FAQ
+
+### Do I have to write proofs?
+
+The goal is that ordinary endpoints need none, because the building blocks carry the proofs. An app writes its own only for business rules it wants to prove.
+
+### Where does the name come from?
+
+Espal is short for espalier, a tree trained along a frame as it grows.
 
 ## License
 
