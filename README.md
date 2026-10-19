@@ -69,7 +69,7 @@ lake test       # tests
 
 ### Do I have to write proofs?
 
-The goal is that ordinary endpoints need none, because the building blocks carry the proofs. An app writes its own only for business rules it wants to prove.
+Not for standard web concerns. The building blocks prove properties such as query budgets, tenant scoping and permission checks, and those proofs cover every endpoint built from them. Your application's own logic, such as how an invoice total adds up, needs proofs that you write.
 
 ### Where does the name come from?
 
