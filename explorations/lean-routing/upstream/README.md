@@ -8,6 +8,7 @@ Each patch applies on commit `75d8bc3`, except `0002`, which applies on top of `
 | `0002` | A `Nat` capture matches only the digits a link renders | 24 lines on top of `0001` | `/users/042` gets a 404 |
 | `0003` | Reject two `route_table` rows with the same pattern | 20 lines | A table with two such rows fails to compile |
 | `0004` | Spacing and line-break hints for `route_table` | 6 lines | Printed tables keep one row per line |
+| `0005` | An issue asking about matching routes with a trie | An issue, with a prototype | Nothing until a pull request lands |
 
 ## How realistic each one is
 
@@ -15,6 +16,7 @@ Each patch applies on commit `75d8bc3`, except `0002`, which applies on top of `
 - **`0002`.** It applies a rule from earlier releases to `Nat` captures. Releases 0.8.0 and 0.9.0 refuse segments that no link can produce. It changes behaviour for every consumer, which lean-routing's `CLAUDE.md` asks a proposal to say. In `dispatch-bench`, dispatch time stayed within run-to-run noise.
 - **`0003`.** It mirrors the existing check for a repeated name. It catches identical patterns only. A partial overlap, such as a `String` capture listed before a literal, stays legal, since the order of routes decides it.
 - **`0004`.** It only changes how tables print. lean-fmt then prints one row per line with spaces around `:=`. It puts the opening bracket on the table's first line, where the README's examples put it on the next.
+- **`0005`.** Dispatch costs about 15 ns per route, so it grows with the number of routes. A trie or a first-segment index keeps the same results with no change to the API. It's a question rather than a patch, since the maintainer may prefer another structure, and it goes out after `0001`.
 
 lean-routing has merged outside pull requests before. Val's [#1](https://github.com/paulbutcher/lean-routing/pull/1) moved it to Lean 4.34.1, and [#2](https://github.com/paulbutcher/lean-routing/pull/2) percent-encoded `String` captures in links.
 
