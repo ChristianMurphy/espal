@@ -1,19 +1,27 @@
 `dispatchTable` and `matchTable` try each route in order, so the time to dispatch a request grows with the number of routes. A request that matches nothing pays for every route twice, since the trailing-slash check in `respond?` scans again.
 
-Dispatching to the last route took this long on Lean 4.35.0, pinned to one CPU:
+A segment trie, built once in `toHandler` and `Router.toHandler`, would keep dispatch time flat. Each node branches on a literal, a `Nat` capture or a `String` capture. It keeps the lowest route index, so it picks the route `matchTable` picks. The existing `Route.tryDispatch` then runs that route, so results stay the same.
 
-| Routes | Matching request | No match |
-|---|---|---|
-| 10 | 0.4 µs | 0.2 µs |
-| 200 | 3.2 µs | 2.5 µs |
-| 1,000 | 15.4 µs | 13.2 µs |
+I compared it with the scan and a lighter index in a [prototype](https://github.com/ChristianMurphy/espal/blob/explore/lean-routing/explorations/lean-routing/TrieBench.lean). The index maps each route's first literal to the routes that start with it. One route table gives each route its own first literal, and the other puts every route under `/api`. Times are medians of three runs on Lean 4.35.0, pinned to one CPU, in microseconds.
 
-On the same machine, with Lean 4.36.0-rc1, Std.Http spent 360 µs of CPU on a request. The scan is small next to that. It would matter more for an app with many routes once Std.Http gets faster.
+Request to the last route:
 
-A few ways to go:
+| Routes | Scan | Index | Trie | Scan under `/api` | Index under `/api` | Trie under `/api` |
+|---|---|---|---|---|---|---|
+| 10 | 0.37 | 0.24 | 0.42 | 0.43 | 0.47 | 0.51 |
+| 200 | 3.12 | 0.28 | 0.50 | 3.76 | 4.00 | 0.54 |
+| 1,000 | 16.28 | 0.27 | 0.45 | 20.09 | 21.86 | 0.52 |
 
-1. **A segment trie, built once in `toHandler` and `Router.toHandler`.** Each node branches on a literal, a `Nat` capture or a `String` capture. It keeps the lowest route index, so it picks the route `matchTable` picks. The existing `Route.tryDispatch` then runs that route, so results stay the same. In a [prototype](https://github.com/ChristianMurphy/espal/blob/explore/lean-routing/explorations/lean-routing/TrieBench.lean), lookup took about 0.5 µs from 10 to 1,000 routes, and 0.1 µs for no match. The cost is a data structure to maintain.
-2. **An index on the first segment.** Routes that start with a literal go in a map keyed by it. The rest stay in a list, and lookup merges the two by route index. It's less code. It helps most when routes start with different literals, and routes that share a first segment still scan.
-3. **Keep the scan and document the cost.** Nothing changes, and apps with many routes know what to expect.
+Request that matches no route:
 
-Would one of these be a good fit? If so, I could open a pull request for it and see it through review. I'd test it against `matchTable`, and try for a theorem that the two agree.
+| Routes | Scan | Index | Trie | Scan under `/api` | Index under `/api` | Trie under `/api` |
+|---|---|---|---|---|---|---|
+| 10 | 0.19 | 0.06 | 0.11 | 0.24 | 0.27 | 0.19 |
+| 200 | 2.72 | 0.07 | 0.11 | 3.91 | 4.01 | 0.19 |
+| 1,000 | 13.16 | 0.07 | 0.13 | 19.69 | 21.16 | 0.20 |
+
+The index is fastest when routes start with different literals, but under a shared prefix it scans every route. The trie stays near 0.5 µs either way. On the same machine, with Lean 4.36.0-rc1, Std.Http spent 360 µs of CPU on a request. A small app won't notice any of this today, but an app with many routes would once Std.Http gets faster.
+
+The trie adds a data structure to maintain. If that's more than you'd like, the index is less code, or the scan could stay with its cost documented.
+
+Would a trie be a good fit? If so, I could open a pull request and see it through review. I'd test it against `matchTable`, and try for a theorem that the two agree.

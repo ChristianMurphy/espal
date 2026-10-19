@@ -6,7 +6,7 @@ This trial checks [lean-routing](https://github.com/paulbutcher/lean-routing) as
 
 - `Trial/Behaviour.lean` checks each claim below that mentions a path, with `#guard`.
 - `DispatchBench.lean` times dispatch with many routes.
-- `TrieBench.lean` times a segment trie against lean-routing's scan.
+- `TrieBench.lean` times a segment trie and a first-segment index against lean-routing's scan, and `trie-bench.txt` holds three of its runs.
 - `serve/` runs Std.Http on Lean 4.36.0-rc1 with and without lean-routing, and `serve/bench_router.py` compares them.
 - `upstream/` holds the changes to offer lean-routing, as patches, with how realistic each one is.
 
@@ -96,16 +96,35 @@ lean-routing tries each route in order and returns the first that matches, so it
 - The newer routers stop depending on declaration order. Go and axum rank overlapping patterns by specificity and reject the rest when the app adds them. httprouter allows no overlap at all.
 - FastRoute's author notes that routing is rarely the bottleneck in a typical application.
 
-### A trie for lean-routing's patterns
+### Faster matching for lean-routing's patterns
 
-`TrieBench.lean` builds a segment trie from the same routes. At each node it follows a matching literal, `Nat` capture or `String` capture, and keeps the lowest route index, so it picks the route the scan picks. It then runs that one route through `dispatch`. It agreed with `dispatchTable` on every path the benchmark checked. Times per request, pinned to one CPU, ranges over three runs:
+`TrieBench.lean` tries two indexes over the same routes. Each picks the route the scan picks, then runs that one route through `dispatch`, and both agreed with `dispatchTable` on every path the benchmark checked.
 
-| Routes | Scan, hit on the last route | Trie, hit | Scan, no match | Trie, no match |
-|---|---|---|---|---|
-| 10 | 0.34 to 0.39 µs | 0.43 to 0.53 µs | 0.18 to 0.23 µs | 0.11 to 0.14 µs |
-| 50 | 0.87 to 1.10 µs | 0.44 to 0.49 µs | 0.70 to 0.85 µs | 0.10 to 0.12 µs |
-| 200 | 3.1 to 3.4 µs | 0.44 to 0.47 µs | 2.5 to 2.6 µs | 0.11 to 0.12 µs |
-| 1,000 | 15.4 to 17.5 µs | 0.44 to 0.53 µs | 12.7 to 15.0 µs | 0.10 to 0.13 µs |
+- **A segment trie.** At each node it follows a matching literal, `Nat` capture or `String` capture, and keeps the lowest route index.
+- **A first-segment index.** A map from a route's first literal to the routes that start with it. Lookup merges those, by route index, with the routes that start with a capture.
+
+One table gives each route its own first literal, as in `/r1/:id:Nat`. The other puts every route under `/api`, as many APIs do. Times are medians of three runs, pinned to one CPU, in microseconds.
+
+Request to the last route:
+
+| Routes | Scan | Index | Trie | Scan under `/api` | Index under `/api` | Trie under `/api` |
+|---|---|---|---|---|---|---|
+| 10 | 0.37 | 0.24 | 0.42 | 0.43 | 0.47 | 0.51 |
+| 50 | 0.92 | 0.24 | 0.44 | 1.20 | 1.29 | 0.53 |
+| 200 | 3.12 | 0.28 | 0.50 | 3.76 | 4.00 | 0.54 |
+| 1,000 | 16.28 | 0.27 | 0.45 | 20.09 | 21.86 | 0.52 |
+
+Request that matches no route:
+
+| Routes | Scan | Index | Trie | Scan under `/api` | Index under `/api` | Trie under `/api` |
+|---|---|---|---|---|---|---|
+| 10 | 0.19 | 0.06 | 0.11 | 0.24 | 0.27 | 0.19 |
+| 50 | 0.70 | 0.07 | 0.12 | 0.92 | 1.02 | 0.19 |
+| 200 | 2.72 | 0.07 | 0.11 | 3.91 | 4.01 | 0.19 |
+| 1,000 | 13.16 | 0.07 | 0.13 | 19.69 | 21.16 | 0.20 |
+
+- The index is fastest when routes start with different literals. Under a shared prefix it scans every route, slightly slower than the scan itself.
+- The trie stays near 0.5 µs for a match and 0.2 µs for no match in both tables.
 
 ### What this means for Espal
 

@@ -2,9 +2,10 @@ import Routing
 import Std.Data.HashMap
 
 /-!
-A segment trie that picks the same route as lean-routing's first-match scan, timed against
-`dispatchTable`. The trie only chooses a route index; `Route.tryDispatch` then runs that one route,
-so the result is the one the scan gives.
+Two indexes that pick the same route as lean-routing's first-match scan, timed against
+`dispatchTable`: a segment trie, and a map from a route's first literal to the routes that start
+with it. Each only chooses which routes to try; `Route.tryDispatch` then runs them, so the result
+is the one the scan gives.
 -/
 
 open Routing
@@ -70,13 +71,55 @@ def trieDispatch (routes : Array (Route α)) (t : Trie) (method : Std.Http.Metho
     (path : List String) : Option α :=
   (t.find 0 path).bind fun i => routes[i]?.bind (·.tryDispatch method path)
 
-def mkRoutes (n : Nat) : List (Route Nat) :=
-  (List.range n).filterMap fun i =>
+/-- Routes grouped by their first segment when it is a literal; the rest stay in order. -/
+structure FirstIndex where
+  byLit : Std.HashMap String (Array Nat) := {}
+  rest : Array Nat := #[]
+
+def buildIndex (routes : List (Route α)) : FirstIndex :=
+  routes.zipIdx.foldl (init := {}) fun ix (r, i) =>
+    match r.segs with
+    | .lit s _ :: _ => { ix with byLit := ix.byLit.insert s ((ix.byLit.getD s #[]).push i) }
+    | _ => { ix with rest := ix.rest.push i }
+
+/-- Tries the routes in `a` and `b`, both ascending, in ascending order of index. -/
+def firstOf (routes : Array (Route α)) (method : Std.Http.Method) (path : List String)
+    (a b : Array Nat) : Nat → Nat → Nat → Option α
+  | 0, _, _ => none
+  | fuel + 1, i, j =>
+    let next :=
+      match a[i]?, b[j]? with
+      | some x, some y => if x < y then some (x, i + 1, j) else some (y, i, j + 1)
+      | some x, none => some (x, i + 1, j)
+      | none, some y => some (y, i, j + 1)
+      | none, none => none
+    match next with
+    | none => none
+    | some (r, i', j') =>
+      match routes[r]?.bind (·.tryDispatch method path) with
+      | some v => some v
+      | none => firstOf routes method path a b fuel i' j'
+
+def indexDispatch (routes : Array (Route α)) (ix : FirstIndex) (method : Std.Http.Method)
+    (path : List String) : Option α :=
+  let a :=
+    match path with
+    | p :: _ => ix.byLit.getD p #[]
+    | [] => #[]
+  firstOf routes method path a ix.rest (a.size + ix.rest.size) 0 0
+
+/-- `n` routes `/api/r<i>/:id:Nat` when `shared`, else `/r<i>/:id:Nat`. -/
+def mkRoutes (shared : Bool) (n : Nat) : List (Route Nat) :=
+  (List.range n).filterMap fun (i : Nat) =>
     let s := s!"r{i}"
     if h : dotSegment s = false then
-      some
-        { method := .get, segs := [.lit s h, .capture "id" .nat],
-          handler := fun (id : Nat) => id + i }
+      if shared then
+        some
+          { method := .get, segs := [.lit "api", .lit s h, .capture "id" .nat],
+            handler := fun (_ : Nat) => i }
+      else
+        some
+          { method := .get, segs := [.lit s h, .capture "id" .nat], handler := fun (_ : Nat) => i }
     else none
 
 def time (iters : Nat) (f : Nat → Option Nat) : IO (Float × Nat) := do
@@ -89,24 +132,33 @@ def time (iters : Nat) (f : Nat → Option Nat) : IO (Float × Nat) := do
   return ((stop - start).toFloat / iters.toFloat / 1000.0, acc)
 
 def main : IO UInt32 := do
-  for n in [10, 50, 200, 1000] do
-    let list := mkRoutes n
-    let arr := list.toArray
-    let t := build list
-    let hit := fun k => [s!"r{n - 1}", toString (k % 100000)]
-    let miss := fun k => ["nothing", toString (k % 100000)]
-    -- Both must pick the same route before their times mean anything.
-    for k in [0:1000] do
-      if
-          dispatchTable list .get (hit k) != trieDispatch arr t .get (hit k) ||
-            dispatchTable list .get (miss k) != trieDispatch arr t .get (miss k) then
-        IO.eprintln s!"mismatch at {n} routes";
-        return 1
-    let iters := 200000
-    let (scanHit, a) ← time iters fun k => dispatchTable list .get (hit k)
-    let (trieHit, b) ← time iters fun k => trieDispatch arr t .get (hit k)
-    let (scanMiss, _) ← time iters fun k => dispatchTable list .get (miss k)
-    let (trieMiss, _) ← time iters fun k => trieDispatch arr t .get (miss k)
-    IO.println
-        s!"{n} routes: hit scan {scanHit} µs, trie {trieHit} µs; miss scan {scanMiss} µs, trie {trieMiss} µs (checks {a == b})"
+  IO.println
+      "| Routes | Shape | Scan, hit | Index, hit | Trie, hit | Scan, miss | Index, miss | Trie, miss |"
+  for (shape, shared) in [("own first literal", false), ("shared /api prefix", true)] do
+    let pre := if shared then ["api"] else []
+    for n in [10, 50, 200, 1000] do
+      let list := mkRoutes shared n
+      let arr := list.toArray
+      let t := build list
+      let ix := buildIndex list
+      let hit := fun k => pre ++ [s!"r{n - 1}", toString (k % 100000)]
+      let miss := fun k => pre ++ ["nothing", toString (k % 100000)]
+      -- All three must pick the same route before their times mean anything.
+      for k in [0:1000] do
+        for path in [hit k, miss k] do
+          let want := dispatchTable list .get path
+          if want != trieDispatch arr t .get path || want != indexDispatch arr ix .get path then
+            IO.eprintln s!"mismatch at {n} routes, {shape}"
+            return 1
+      let iters := 200000
+      let (sh, _) ← time iters fun k => dispatchTable list .get (hit k)
+      let (ih, _) ← time iters fun k => indexDispatch arr ix .get (hit k)
+      let (th, _) ← time iters fun k => trieDispatch arr t .get (hit k)
+      let (sm, _) ← time iters fun k => dispatchTable list .get (miss k)
+      let (im, _) ← time iters fun k => indexDispatch arr ix .get (miss k)
+      let (tm, _) ← time iters fun k => trieDispatch arr t .get (miss k)
+      let f (x : Float) : String :=
+        let c := (x * 100).round.toUInt64.toNat
+        s!"{c / 100}.{if c % 100 < 10 then "0" else ""}{c % 100}"
+      IO.println s!"| {n} | {shape} | {f sh} | {f ih} | {f th} | {f sm} | {f im} | {f tm} |"
   return 0
