@@ -109,22 +109,22 @@ Request to the last route:
 
 | Routes | Scan | Index | Trie | Scan under `/api` | Index under `/api` | Trie under `/api` |
 |---|---|---|---|---|---|---|
-| 10 | 0.37 | 0.24 | 0.42 | 0.43 | 0.47 | 0.51 |
-| 50 | 0.92 | 0.24 | 0.44 | 1.20 | 1.29 | 0.53 |
-| 200 | 3.12 | 0.28 | 0.50 | 3.76 | 4.00 | 0.54 |
-| 1,000 | 16.28 | 0.27 | 0.45 | 20.09 | 21.86 | 0.52 |
+| 10 | 0.39 | 0.27 | 0.41 | 0.43 | 0.47 | 0.45 |
+| 50 | 1.01 | 0.26 | 0.41 | 1.26 | 1.32 | 0.44 |
+| 200 | 3.39 | 0.30 | 0.42 | 4.00 | 4.27 | 0.51 |
+| 1,000 | 15.43 | 0.33 | 0.40 | 20.83 | 23.10 | 0.50 |
 
 Request that matches no route:
 
 | Routes | Scan | Index | Trie | Scan under `/api` | Index under `/api` | Trie under `/api` |
 |---|---|---|---|---|---|---|
-| 10 | 0.19 | 0.06 | 0.11 | 0.24 | 0.27 | 0.19 |
-| 50 | 0.70 | 0.07 | 0.12 | 0.92 | 1.02 | 0.19 |
-| 200 | 2.72 | 0.07 | 0.11 | 3.91 | 4.01 | 0.19 |
-| 1,000 | 13.16 | 0.07 | 0.13 | 19.69 | 21.16 | 0.20 |
+| 10 | 0.19 | 0.07 | 0.08 | 0.27 | 0.28 | 0.13 |
+| 50 | 0.75 | 0.09 | 0.09 | 0.98 | 1.15 | 0.12 |
+| 200 | 2.59 | 0.07 | 0.08 | 3.72 | 3.97 | 0.11 |
+| 1,000 | 12.64 | 0.07 | 0.07 | 19.51 | 20.07 | 0.12 |
 
-- The index is fastest when routes start with different literals. Under a shared prefix it scans every route, slightly slower than the scan itself.
-- The trie stays near 0.5 µs for a match and 0.2 µs for no match in both tables.
+- The index is about 0.1 µs faster than the trie when routes start with different literals. Under a shared prefix it scans every route, slightly slower than the scan itself.
+- The trie stays at 0.4 to 0.5 µs for a match and about 0.1 µs for no match in both tables. It only parses a segment as a number when the node has a `Nat` capture to follow.
 
 ### What this means for Espal
 

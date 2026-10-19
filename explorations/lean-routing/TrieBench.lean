@@ -57,8 +57,9 @@ def Trie.find (t : Trie) (at_ : Nat) : List String → Option Nat
   | p :: ps =>
     let node := t.nodes[at_]?.getD {}
     let viaLit := node.lits[p]? |>.bind (t.find · ps)
-    let viaNat := if p.toNat?.isSome then node.nat.bind (t.find · ps) else none
-    let viaStr := if unlinkable p then none else node.str.bind (t.find · ps)
+    -- Only parse the segment when this node has a capture child to follow.
+    let viaNat := node.nat.bind fun c => if p.toNat?.isSome then t.find c ps else none
+    let viaStr := node.str.bind fun c => if unlinkable p then none else t.find c ps
     let below := minOpt viaLit (minOpt viaNat viaStr)
     if ps.isEmpty && p == "" then minOpt node.first below else below
 termination_by path => path.length
