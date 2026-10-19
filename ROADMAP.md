@@ -84,18 +84,6 @@ Three entries on the OWASP API Security Top 10 (2023) map onto these defaults:
 - **Documentation.** The documentation site uses [Verso](https://verso.lean-lang.org/doc/latest), the Lean FRO's documentation tool, under Apache 2.0. GitHub Pages serves it at `christianmurphy.github.io/espal`. Verso elaborates the Lean code in a document as it builds, which keeps examples from going stale. Its SubVerso library lets the documents use a different Lean version from the packages. The site uses the logo and favicon in `docs/brand`.
 - **Name.** A check in October 2026 found `espal` free on npm, crates.io and PyPI, and found no owner for `espal.dev`. Others hold `espal.com`, `espal.org` and `espal.net`. Reservoir names each package by its owner, so `@ChristianMurphy/espal` can't collide with another. The TypeScript client needs its npm name, `espal` or a scope such as `@espal`, claimed before work on the [TypeScript client](#typescript-client) starts. MIT's Software Design Group has a research system named Espalier, a spreadsheet with database queries, in a different field.
 
-## Where the claims run ahead of the plan
-
-The README and the pitch promise more than this plan delivers. We fix these before 0.1.
-
-The README says an endpoint declares how much work it may spend, and that code over budget fails to compile. Only statement budgets exist, and only in the prototype. Lean has no CPU or memory limit per task, and nothing can stop a pure computation once it runs. Static bounds on pure code form a research track below.
-
-The README also says the compiler checks how the app behaves under load. The compiler can check statement counts and row bounds, which shape load behavior. The behavior itself we measure.
-
-"Stateless" holds for app processes, while the database holds all the state. Adding app processes moves the bottleneck to the database. Row and query-plan budgets matter for that reason as much as statement budgets do.
-
-Proposed README bullet: "**Query budgets.** Each endpoint declares how many statements it sends and how many rows each may return. A handler that sends a query per row, or a query without a row bound, fails to compile."
-
 ## Kinds of evidence
 
 Each property below carries one of these labels. Only the first two come from the compiler. A label gives the target for 0.1, and each property says which parts the prototype already proves.
