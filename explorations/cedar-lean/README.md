@@ -71,7 +71,20 @@ So Espal would pass only the principal, the resource and their ancestors, which 
 
 ## Binary size
 
-`SpecSize.lean`, which only calls `isAuthorized`, builds a 119 MB binary, or 79 MB stripped. Espal's target is 10 MB. The compiled code of `Batteries.Tactic.Init` and `Batteries.Tactic.Alias` calls into the Lean package at start-up. `Cedar.Data.LT` imports the first, and Batteries' list lemmas import the second. Four Cedar files derive `Lean.ToJson`, which does the same. Removing those instances alone left the binary at 119 MB.
+`SpecSize.lean`, which only calls `isAuthorized`, builds a 119 MB binary on Lean 4.35.0, or 79 MB stripped. Espal's target is 10 MB. Two things pull the Lean package into the program at run time.
+
+- Four Batteries tactic modules import Lean modules plainly, though only their compile-time code uses them. They are `Tactic.Alias`, `Tactic.Init`, `Tactic.SeqFocus` and `Util.ProofWanted`, and Batteries' list, order and red-black map modules import them.
+- Four Cedar files derive `Lean.ToJson`, in `Cedar.Spec` and `Cedar.Data`.
+
+Each line below is the same program on Lean 4.36.0-rc1, with `patches/lean-4.36.patch` applied. The Batteries change is `patches/batteries-meta-imports.patch` on Batteries `main` at `8e746d7`, and the Cedar change is `patches/cedar-no-json.patch`.
+
+| Batteries | Cedar | Binary |
+|---|---|---|
+| as released | as released | 124 MB |
+| four imports made `meta` | as released | 124 MB |
+| four imports made `meta` | no `ToJson` instances | 4.6 MB |
+
+With the Batteries change, a program that imports every Batteries data module apart from `NameSet`, `MLList.Heartbeats` and `Nondet` drops from 124 MB to 3.8 MB. Those three wrap Lean's own types, so they need the Lean package.
 
 ## Code style
 

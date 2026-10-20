@@ -1,0 +1,70 @@
+diff --git a/cedar-lean/Cedar/Data/Set.lean b/cedar-lean/Cedar/Data/Set.lean
+index 5f5f9dd..501f731 100644
+--- a/cedar-lean/Cedar/Data/Set.lean
++++ b/cedar-lean/Cedar/Data/Set.lean
+@@ -19,7 +19,6 @@ module
+ public import Cedar.Data.List
+ import Batteries.Data.List.Basic
+ import Batteries.Data.List.Lemmas
+-public import Lean.Data.Json.FromToJson.Basic
+ 
+ /-!
+ # Canonical list-based sets
+@@ -36,7 +35,7 @@ namespace Cedar.Data
+ 
+ public inductive Set (α : Type u) where
+ | mk (l : List α)
+-deriving Repr, DecidableEq, Inhabited, Lean.ToJson
++deriving Repr, DecidableEq, Inhabited
+ 
+ namespace Set
+ 
+diff --git a/cedar-lean/Cedar/Spec/Policy.lean b/cedar-lean/Cedar/Spec/Policy.lean
+index eae5c44..a312c16 100644
+--- a/cedar-lean/Cedar/Spec/Policy.lean
++++ b/cedar-lean/Cedar/Spec/Policy.lean
+@@ -159,6 +159,5 @@ deriving instance Repr, DecidableEq, Inhabited for ResourceScope
+ deriving instance Repr, DecidableEq, Inhabited for ActionScope
+ deriving instance Repr, DecidableEq, Inhabited for Policy
+ 
+-deriving instance Lean.ToJson for PolicyID
+ 
+ end Cedar.Spec
+diff --git a/cedar-lean/Cedar/Spec/Response.lean b/cedar-lean/Cedar/Spec/Response.lean
+index fc5a4fc..6b37004 100644
+--- a/cedar-lean/Cedar/Spec/Response.lean
++++ b/cedar-lean/Cedar/Spec/Response.lean
+@@ -17,7 +17,6 @@
+ module
+ 
+ public import Cedar.Spec.Policy
+-import Lean.Data.Json.FromToJson
+ 
+ /-!
+ This file defines Cedar responses.
+@@ -40,7 +39,7 @@ public structure Response where
+ 
+ ----- Derivations -----
+ 
+-deriving instance Repr, DecidableEq, Lean.ToJson for Decision
+-deriving instance Repr, DecidableEq, Lean.ToJson for Response
++deriving instance Repr, DecidableEq for Decision
++deriving instance Repr, DecidableEq for Response
+ 
+ end Cedar.Spec
+diff --git a/cedar-lean/Cedar/Spec/Value.lean b/cedar-lean/Cedar/Spec/Value.lean
+index 14dfdd2..0f6ae10 100644
+--- a/cedar-lean/Cedar/Spec/Value.lean
++++ b/cedar-lean/Cedar/Spec/Value.lean
+@@ -157,9 +157,9 @@ public instance : Coe Value (Result (Data.Set Value)) where
+ 
+ deriving instance Repr, DecidableEq, BEq for Except
+ deriving instance Repr, DecidableEq for Error
+-deriving instance Repr, DecidableEq, Inhabited, Lean.ToJson for Name
++deriving instance Repr, DecidableEq, Inhabited for Name
+ deriving instance Repr, DecidableEq, Inhabited for EntityType
+-deriving instance Repr, DecidableEq, Inhabited, Lean.ToJson for EntityUID
++deriving instance Repr, DecidableEq, Inhabited for EntityUID
+ deriving instance Repr, DecidableEq, Inhabited for Prim
+ deriving instance Repr, Inhabited for Value
+ 

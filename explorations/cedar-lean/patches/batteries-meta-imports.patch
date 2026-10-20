@@ -1,0 +1,52 @@
+diff --git a/Batteries/Tactic/Alias.lean b/Batteries/Tactic/Alias.lean
+index d6ee201..4f15b28 100644
+--- a/Batteries/Tactic/Alias.lean
++++ b/Batteries/Tactic/Alias.lean
+@@ -7,7 +7,7 @@ module
+ 
+ public meta import Lean.Compiler.NoncomputableAttr
+ public meta import Batteries.CodeAction.Deprecated
+-import Lean.Elab.Attributes
++meta import Lean.Elab.Attributes
+ 
+ public meta section
+ 
+diff --git a/Batteries/Tactic/Init.lean b/Batteries/Tactic/Init.lean
+index c22a142..7e3735a 100644
+--- a/Batteries/Tactic/Init.lean
++++ b/Batteries/Tactic/Init.lean
+@@ -6,7 +6,7 @@ Authors: Mario Carneiro
+ module
+ 
+ public meta import Lean.Elab.Tactic.ElabTerm
+-import Lean.Exception
++meta import Lean.Exception
+ 
+ public meta section
+ 
+diff --git a/Batteries/Tactic/SeqFocus.lean b/Batteries/Tactic/SeqFocus.lean
+index 4504e48..6578e50 100644
+--- a/Batteries/Tactic/SeqFocus.lean
++++ b/Batteries/Tactic/SeqFocus.lean
+@@ -6,7 +6,7 @@ Authors: Jeremy Avigad
+ module
+ 
+ public meta import Lean.Elab.Tactic.Basic
+-import Lean.Exception
++meta import Lean.Exception
+ 
+ public meta section
+ 
+diff --git a/Batteries/Util/ProofWanted.lean b/Batteries/Util/ProofWanted.lean
+index 0afa5a6..3eda83c 100644
+--- a/Batteries/Util/ProofWanted.lean
++++ b/Batteries/Util/ProofWanted.lean
+@@ -7,7 +7,7 @@ module
+ 
+ import Batteries.Tactic.Lint.Misc
+ public meta import Lean.Meta.Tactic.TryThis -- shake: keep
+-import Lean.Parser.Command
++meta import Lean.Parser.Command
+ 
+ /-!
+ # The `theorem_wanted`, `def_wanted`, and `instance_wanted` commands
