@@ -12,6 +12,16 @@ Keep agent instructions in `.claude/`. Don't put them in `CONTRIBUTING.md` or ot
 
 Reason about Espal's design from its goals in `README.md` and `ROADMAP.md`. Another project's conventions decide how to approach that project, and they don't decide what Espal needs.
 
+## Proofs
+
+- Try to prove a claim before you make it a premise. Time-box the attempt, and if it fails, record the obstacle beside the premise.
+- Write a fuzzed property once, as a Bool predicate, and define the premise as `∀ x, p x = true`. The fuzz test then checks the premise's own definition.
+- State a theorem about the function the code calls. If the code and the theorem each spell out the same step, move that step into one function and name it in the theorem.
+- Give each premise only the condition its own reason needs. Test the guard's edge cases to find the weakest condition that holds.
+- Check each docstring claim against the definition, such as which limits a function checks.
+- Show that each fuzzed property can fail. Break its guard on purpose and confirm that the test finds a counterexample.
+- When a proof needs a general lemma that a library lacks, write it in the form that library would take, and offer it upstream.
+
 ## Writing
 
 - Scan all text meant for people with Vale, using the AiTells and Voices styles, and with LanguageTool. That covers docs, design notes, commit messages, issues, pull requests and chat posts. Then reread it, since neither catches everything.
