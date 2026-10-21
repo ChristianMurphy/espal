@@ -283,7 +283,7 @@ Espal detects overload from the time requests wait in its admission queue. When 
 
 Lean supports deadlines on I/O and cooperative cancellation. `IO.cancel` sets a flag that code must poll. There is no CPU or memory cap per task, so a hard cap needs a separate process and a supervisor.
 
-The single libuv loop thread may saturate before the handlers do. Accepting and parsing requests then becomes the bottleneck, and shedding can't relieve it. [Load testing](#load-testing-and-behavior-under-faults) measures where saturation starts.
+The single libuv loop thread may saturate before the handlers do. Accepting and parsing requests then becomes the bottleneck, and shedding can't relieve it. [Load testing](#load-testing-and-behavior-under-faults) measures where saturation starts. In the [HTTP spike](bench/results/http/2026-10-18-cloud-4vcpu/README.md), Std.Http spent about 540 µs of CPU on each `/plaintext` request, mostly on handoffs between threads. A `503` takes the same path, so at twice peak load the proxy sheds the excess.
 
 ### Retries don't duplicate writes
 
@@ -460,7 +460,7 @@ Here we pick the HTTP layer, the Postgres client and the libraries we keep. We a
 - [Admission control](#overload-and-runtime-limits), deadlines per request, and `503` with `Retry-After`.
 - Several processes behind a proxy, with health endpoints. On `SIGTERM` a process stops accepting, finishes requests in flight, then exits.
 - [Idempotency keys](#retries-dont-duplicate-writes).
-- Fault runs under load. We kill a process with `SIGKILL`, stop the database primary, and cut the network to Postgres. Each run reports errors, recovery time and cross-tenant reads.
+- Fault runs under load. We stop a process with `SIGTERM`, kill one with `SIGKILL`, stop the database primary, and cut the network to Postgres. Each run reports errors, recovery time and cross-tenant reads.
 - An hour-long soak run that tracks memory growth.
 - A check of the default limits under load. We also measure each example route's peak memory at its limits, as [memory per request](#memory-per-request-stays-within-a-declared-bound) describes.
 
@@ -519,17 +519,18 @@ None of these block 0.1.
 
 ## Performance targets
 
-These targets come from the earlier proposal. Agreed figures stand; we fix the rest at the end of the [spikes](#spikes-and-a-baseline).
+These targets come from the earlier proposal, and we fixed their figures after the [spikes](#spikes-and-a-baseline). The database failover row waits for the Postgres client to hold requests while it reconnects.
 
 | Target | Status |
 |---|---|
 | Comparison with Go and Axum | Reported, with no promised ratio. The exam-end burst below is the throughput goal. In our [HTTP spike](bench/results/http/2026-10-18-cloud-4vcpu/README.md), Std.Http on Lean 4.36.0-rc1 served 4.6 percent of Go's rate on the same two CPUs. That gap is about 22×. An earlier third-party test on an Apple M3 found about 17×. |
 | With one Postgres read, at least 80% of a bare libpq client | Agreed. In the [Postgres spike](bench/results/postgres/2026-10-18-cloud-4vcpu/README.md), the libpq client matched a bare C client, as both reached the Postgres core's limit. |
-| At 70% of peak load, p99 under 10 ms and p99.9 under 50 ms | Proposed. Measured on the benchmark app on reference hardware, by the method below. |
-| At twice peak load, excess requests get a `503` within 5 ms | Proposed. Detection as in [overload and runtime limits](#overload-and-runtime-limits). |
+| At 70% of peak load, p99 under 15 ms and p99.9 under 50 ms | Agreed. Measured on the benchmark app on reference hardware, by the method below. The [HTTP spike](bench/results/http/2026-10-18-cloud-4vcpu/README.md) ran on a shared VM. On that VM, Std.Http reached a p99 of 9.7 to 11.6 ms and a p99.9 of 17 to 25 ms. |
+| At twice peak load, the proxy answers excess requests with `503` within 5 ms | Agreed. The proxy holds a connection limit for each process and a short queue timeout. Espal's [admission queue](#overload-and-runtime-limits) limits the requests that get through. |
 | Three nodes reach at least 2.7× the throughput of one | Agreed. Holds until Postgres saturates. We report it with the database on its own machine. |
-| Losing a node causes under 0.1% errors, all from requests in flight on that node | Proposed. Depends on proxy health checks, draining and retries of idempotent requests. |
-| After a database failover, writes resume within 30 s with no duplicates | Proposed. The Postgres setup controls failover time. Espal's part is reconnecting and idempotency keys. |
+| Losing a node causes under 0.1% errors, all from requests in flight on that node | Agreed. Counted over a 60-second run at the exam-end rate of 1,700 requests per second, killing the node at 30 s. Depends on proxy health checks and retries of idempotent requests. |
+| Stopping a process with `SIGTERM` causes no errors | Agreed. The process stops accepting, finishes the requests in flight, then exits. |
+| After a database failover, writes resume within 30 s with no duplicates | Proposed. The Postgres setup controls failover time. Espal's part is reconnecting and idempotency keys. In the [Postgres spike](bench/results/postgres/2026-10-18-cloud-4vcpu/README.md), the pool failed requests that landed on a reconnecting connection. |
 | Zero cross-tenant reads during every fault test | Agreed |
 | At the end of an exam, 100,000 submissions arrive within one minute, about 1,700 per second. Espal stores all of them, loses none and stores none twice. | Agreed. A second run sends half of them in the last ten seconds, about 5,000 per second, to test the admission queue. |
 | Binary under 10 MB, start-up under 100 ms | Agreed. CI checks binary size for both example apps. |
