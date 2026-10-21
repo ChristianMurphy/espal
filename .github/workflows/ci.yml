@@ -36,6 +36,18 @@ jobs:
           leanchecker: "true"
           axiom-audit: "true"
 
+      # Ubuntu 24.04 blocks the unprivileged user namespaces that bubblewrap needs.
+      - name: Install bubblewrap for lake check
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      # Builds and exports Espal in a bubblewrap sandbox, then replays the export through Lean's
+      # kernel and fails on any axiom beyond the standard three. `paranoid.yml` adds more kernels.
+      - name: Replay the export with lake check
+        run: lake check
+
       - name: Pick the lean-fmt release that matches lean-toolchain
         run: |
           echo "LEAN_FMT_TAG=$(cut -d: -f2 lean-toolchain)" >> "$GITHUB_ENV"
