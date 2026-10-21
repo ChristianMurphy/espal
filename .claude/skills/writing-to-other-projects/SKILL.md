@@ -21,6 +21,7 @@ description: Draft issues, pull requests and forum posts for projects other than
 
 - Read the project's contributing guide and any AI policy, and follow the order of steps it asks for. Lean core wants an issue before any pull request. For Lean core, open that issue directly rather than a Zulip thread first.
 - If a project asks contributors to disclose AI help, quote its policy to the person and ask how to handle it, every time. Lean core asks for a note in each pull request, and Mathlib asks you to explain which tools you used and how.
+- Sign off commits (`git commit -s`) only when the project asks for it, such as through a DCO check. Espal's sign-off rule covers Espal alone.
 - The leanprover-community projects, such as Mathlib and Batteries, and the Lean Zulip don't allow comments written with an LLM, and they delete them. For those, give the person the points to make, and let them write the text.
 
 ## Handing it over
