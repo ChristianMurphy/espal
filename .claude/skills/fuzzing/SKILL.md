@@ -24,5 +24,5 @@ description: Add property tests, fuzz tests and differential tests to Espal or i
 
 ## Layout
 
-- Keep Plausible out of Espal's root lakefile, because Lake has no dev-dependency scope. Put it in a `tests/` Lake package that requires Espal by path. A root `@[test_driver]` script runs `lake test` there, as lean-routing's `test/` package does.
+- Keep Plausible out of Espal's root lakefile, because Lake has no dev-dependency scope. It lives in the `tests/` Lake package, which requires Espal by path. The root's test driver, the `tests` executable in `scripts/TestDriver.lean`, runs `lake test` there.
 - Fuzz C code under AddressSanitizer with `LEAN_ABORT_ON_PANIC=1`, so a panic stops the run. The clang that ships with Lean lacks the libFuzzer and ASan runtimes.

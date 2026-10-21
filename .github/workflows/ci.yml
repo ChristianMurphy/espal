@@ -52,10 +52,14 @@ jobs:
             (cd ~/lean-fmt && lake build)
           fi
 
+      # The tests compile against their own package in `tests/`, which holds Plausible.
       - name: Check formatting and lean-fmt rules
         run: |
-          ~/lean-fmt/.lake/build/bin/lean-fmt format --check $(git ls-files '*.lean')
-          ~/lean-fmt/.lake/build/bin/lean-fmt check $(git ls-files '*.lean')
+          ~/lean-fmt/.lake/build/bin/lean-fmt format --check $(git ls-files '*.lean' ':!:tests/')
+          ~/lean-fmt/.lake/build/bin/lean-fmt check $(git ls-files '*.lean' ':!:tests/')
+          cd tests
+          lake env ~/lean-fmt/.lake/build/bin/lean-fmt format --check $(git ls-files '*.lean')
+          lake env ~/lean-fmt/.lake/build/bin/lean-fmt check $(git ls-files '*.lean')
 
   zizmor:
     name: Audit workflows

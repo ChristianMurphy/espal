@@ -4,17 +4,12 @@ description = "A web framework for Lean 4 whose compiler checks routes, queries 
 keywords = ["web", "http", "framework", "dsl", "software-verification"]
 license = "Apache-2.0"
 defaultTargets = ["Espal"]
-testDriver = "EspalTests"
+testDriver = "tests"
 lintDriver = "lint"
 
 [[lean_lib]]
 name = "Espal"
 leanOptions = { linter.missingDocs = true }
-
-[[lean_lib]]
-name = "EspalTests"
-srcDir = "tests"
-globs = ["EspalTests.+"]
 
 [[lean_lib]]
 name = "LintRules"
@@ -23,4 +18,9 @@ srcDir = "scripts"
 [[lean_exe]]
 name = "lint"
 root = "Lint"
+srcDir = "scripts"
+
+[[lean_exe]]
+name = "tests"
+root = "TestDriver"
 srcDir = "scripts"
