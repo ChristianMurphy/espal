@@ -401,7 +401,7 @@ Milestones are outcomes without dates. They run in the order below, which keeps 
 
 We finished this milestone. The repository exists, and CI runs the build, tests, lint, a second kernel check, an axiom audit, formatting checks, and a workflow audit. `Espal.Route` provides typed routes with a round-trip proof.
 
-One follow-up remains. Lean 4.35 added `lake check`, which builds the project, replays every declaration through the kernel, and rejects axioms beyond the standard ones. With `--paranoid` it also runs nanoda and other independent checkers, which would bring nanoda back. It needs bubblewrap, so we first confirm that GitHub's runners allow it.
+CI also runs `lake check`, which builds the project in a bubblewrap sandbox, replays every declaration through the kernel, and rejects axioms beyond the standard ones. A weekly job runs `lake check --paranoid`, which adds nanoda and the other checkers that Lean bundles.
 
 ### Spikes and a baseline
 
