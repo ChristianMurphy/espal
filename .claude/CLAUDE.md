@@ -21,6 +21,19 @@ Reason about Espal's design from its goals in `README.md` and `ROADMAP.md`. Anot
 - Check each docstring claim against the definition, such as which limits a function checks.
 - Show that each fuzzed property can fail. Break its guard on purpose and confirm that the test finds a counterexample.
 - When a proof needs a general lemma that a library lacks, write it in the form that library would take, and offer it upstream.
+- Leave a `simp` that closes its goal unsqueezed, so it adapts when the simp set changes. Squeeze a `simp` that leaves a goal open into `simp only [...]`, or restructure the step with `simpa` or `suffices`.
+- Use `decide +kernel` for finite checks. Keep `native_decide`, `decide +native` and `bv_decide` out of any proof Espal cites, since they trust the compiler and add an axiom.
+- Bind every variable in a statement explicitly, as if `autoImplicit` were off. A misspelled name then fails instead of becoming a new variable.
+- Register a fast path with `@[csimp]` and a proof that it equals the reference. Lean never checks `@[implemented_by]` code against the definition it replaces.
+- Pin the axioms of each headline theorem with `#guard_msgs in #print axioms`, so a new axiom fails the build at that theorem.
+
+## Proofs written by an agent
+
+- Agree on a theorem's statement with the person before proving it. To make a proof go through, don't change a statement, a premise, a definition the statement uses, or an axiom. Stop and ask instead.
+- Never finish a proof with `sorry`, an `axiom`, a `local notation` or `local infix` that changes what the statement says, `@[implemented_by]` or `@[extern]`.
+- Before committing, compare the final statement with the agreed one, and check that `#print axioms` lists only `propext`, `Classical.choice` and `Quot.sound`.
+- Shorten a working proof before committing it. Drop unused steps and hypotheses, and replace a long chain of rewrites with a lemma or a closing tactic.
+- List new and changed statements in the commit message or pull request, so a reviewer reads them first.
 
 ## Writing
 
@@ -48,6 +61,7 @@ Reason about Espal's design from its goals in `README.md` and `ROADMAP.md`. Anot
 - `writing-to-other-projects` covers issues, pull requests and posts for projects other than Espal.
 - `c-libraries` covers Lean dependencies, C bindings and linking.
 - `benchmarks` covers running benchmarks and reporting their results.
+- `fuzzing` covers property tests, fuzz tests and differential tests beside proofs.
 
 ## Commits
 
