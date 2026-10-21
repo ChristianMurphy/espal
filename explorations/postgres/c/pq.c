@@ -107,6 +107,14 @@ static uint32_t be32(const char *p) {
   return ntohl(v);
 }
 
+// Reads column `col` of the first row as a binary int4. Fails on NULL, text format or any other
+// length, since the server decides what each column holds.
+static int int4_at(const PGresult *r, int col, uint32_t *out) {
+  if (PQgetisnull(r, 0, col) || PQfformat(r, col) != 1 || PQgetlength(r, 0, col) != 4) return 0;
+  *out = be32(PQgetvalue(r, 0, col));
+  return 1;
+}
+
 // Blocks until the next query in flight finishes. Returns (id << 32 | randomnumber).
 LEAN_EXPORT lean_obj_res espal_pq_next(b_lean_obj_arg obj) {
   pq_t *pq = (pq_t *)lean_get_external_data(obj);
@@ -122,12 +130,13 @@ LEAN_EXPORT lean_obj_res espal_pq_next(b_lean_obj_arg obj) {
       if (r == NULL) continue;
       ExecStatusType st = PQresultStatus(r);
       if (st == PGRES_TUPLES_OK) {
-        if (PQntuples(r) == 1 && PQnfields(r) == 2) {
-          pq->value = ((uint64_t)be32(PQgetvalue(r, 0, 0)) << 32) | be32(PQgetvalue(r, 0, 1));
+        uint32_t id, number;
+        if (PQntuples(r) == 1 && PQnfields(r) == 2 && int4_at(r, 0, &id) && int4_at(r, 1, &number)) {
+          pq->value = ((uint64_t)id << 32) | number;
           pq->ok = 1;
         } else {
           pq->ok = 0;
-          strcpy(pq->err, "expected one row with two columns");
+          strcpy(pq->err, "expected one row with two binary int4 columns");
         }
       } else if (st == PGRES_PIPELINE_SYNC) {
         pq->inflight--;
