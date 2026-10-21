@@ -14,4 +14,4 @@ rev = "v4.35.0"
 [[lean_lib]]
 name = "EspalTests"
 globs = ["EspalTests.+"]
-leanOptions = { warningAsError = true }
+leanOptions = { autoImplicit = false, warningAsError = true }

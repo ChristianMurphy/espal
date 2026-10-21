@@ -23,7 +23,7 @@ Reason about Espal's design from its goals in `README.md` and `ROADMAP.md`. Anot
 - When a proof needs a general lemma that a library lacks, write it in the form that library would take, and offer it upstream.
 - Leave a `simp` that closes its goal unsqueezed, so it adapts when the simp set changes. Squeeze a `simp` that leaves a goal open into `simp only [...]`, or restructure the step with `simpa` or `suffices`.
 - Use `decide +kernel` for finite checks. Keep `native_decide`, `decide +native` and `bv_decide` out of any proof Espal cites, since they trust the compiler and add an axiom.
-- Bind every variable in a statement explicitly, as if `autoImplicit` were off. A misspelled name then fails instead of becoming a new variable.
+- Bind every variable in a statement explicitly, so a misspelled name fails instead of becoming a new variable. Espal and its tests build with `autoImplicit` off, which enforces this, and other projects may not.
 - Register a fast path with `@[csimp]` and a proof that it equals the reference. Lean never checks `@[implemented_by]` code against the definition it replaces.
 - Pin the axioms of each headline theorem with `#guard_msgs in #print axioms`, so a new axiom fails the build at that theorem.
 

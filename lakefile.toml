@@ -9,11 +9,12 @@ lintDriver = "lint"
 
 [[lean_lib]]
 name = "Espal"
-leanOptions = { linter.missingDocs = true }
+leanOptions = { autoImplicit = false, linter.missingDocs = true }
 
 [[lean_lib]]
 name = "LintRules"
 srcDir = "scripts"
+leanOptions = { autoImplicit = false }
 
 [[lean_exe]]
 name = "lint"
