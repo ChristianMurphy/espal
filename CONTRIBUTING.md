@@ -25,7 +25,7 @@ lake env lean-fmt format $(git ls-files '*.lean')
 lake env lean-fmt check $(git ls-files '*.lean')
 ```
 
-`--wfail` turns warnings into errors, so a `sorry` or a missing docstring fails the build. `lake lint` runs `scripts/Lint.lean`, which reads the compiled declarations and rejects `unsafe` and `partial` code, calls to `panic!` or to any function whose name ends in `!`, and axioms beyond `propext`, `Classical.choice` and `Quot.sound`.
+`--wfail` turns warnings into errors, so a `sorry` or a missing docstring fails the build. `lake lint` runs `scripts/Lint.lean`, which reads the compiled declarations and rejects `unsafe` and `partial` code, calls to `panic!` or to any function whose name ends in `!`, and axioms beyond `propext`, `Classical.choice` and `Quot.sound`. It also rejects `@[implemented_by]` and `@[extern]`, since Lean never checks that code, unless `uncheckedAllowed` in `scripts/LintRules.lean` lists the declaration.
 
 CI also re-checks every declaration with Lean's kernel checker and audits axioms with lean-action. If you change a workflow, run `zizmor --persona pedantic .github/workflows`; CI runs it too, and actions stay pinned to commit hashes.
 

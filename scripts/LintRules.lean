@@ -74,6 +74,13 @@ public def isGeneratedCtorIdx (env : Environment) (n : Name) : Bool :=
       Compiler.implementedByAttr.getParam? env base == some n
   | _ => false
 
+/--
+Declarations allowed to run code that Lean never checks, through `@[implemented_by]` or
+`@[extern]`. Add one only with a test that compares its code with the definition it replaces.
+-/
+public def uncheckedAllowed : NameSet :=
+  {}
+
 /-- Problems with one declaration, as human-readable messages. -/
 public def check (env : Environment) (n : Name) (ci : ConstantInfo) : Array String :=
   Id.run do
@@ -84,6 +91,12 @@ public def check (env : Environment) (n : Name) (ci : ConstantInfo) : Array Stri
       out := out.push "is `unsafe`"
     if isUserPartial env n ci then
       out := out.push "is `partial`"
+    unless uncheckedAllowed.contains n do
+      if let some impl := Compiler.implementedByAttr.getParam? env n then
+        unless isGeneratedCtorIdx env impl do
+          out := out.push s!"runs `{impl}` through `@[implemented_by]`, which Lean never checks"
+      if isExtern env n then
+        out := out.push "runs native code through `@[extern]`, which Lean never checks"
     let used := (ci.value? (allowOpaque := true)).elim #[] (·.getUsedConstants)
     for c in used do
       if isPanicking c then

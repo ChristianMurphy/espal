@@ -14,6 +14,8 @@ style rules in `CONTRIBUTING.md`, with the checks in `scripts/LintRules.lean`:
 
 * no `unsafe` or `partial` declarations;
 * no calls to panicking functions: `panic!` and any constant whose name ends in `!`;
+* no `@[implemented_by]` or `@[extern]`, whose code Lean never checks, unless
+  `uncheckedAllowed` lists the declaration;
 * no axioms beyond `propext`, `Classical.choice` and `Quot.sound`, which rules out `sorry`.
 
 It reads Lean's environment after `lake build`, so it sees code exactly as the compiler does.
