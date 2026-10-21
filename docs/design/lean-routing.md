@@ -31,7 +31,7 @@ Espal builds its routes on [lean-routing](https://github.com/paulbutcher/lean-ro
 
 Espal needs no change to lean-routing. The trial led to four pull requests that help its other users, and the [upstream plan](https://github.com/ChristianMurphy/espal/blob/explore/lean-routing/explorations/lean-routing/upstream/README.md) tracks them.
 
-- [#10](https://github.com/paulbutcher/lean-routing/pull/10) proves that a link from `linkFor` reaches its handler, given two fuzzed assumptions about Std.Http. The theorem sits in lean-routing's tests, so Espal still proves its own [route round trip](../../ROADMAP.md#route-round-trip).
+- [#10](https://github.com/paulbutcher/lean-routing/pull/10) proves that a link from `linkFor` reaches its handler, given one fuzzed assumption about Std.Http's parser and decoder. The theorem sits in lean-routing's tests, so Espal still proves its own [route round trip](../../ROADMAP.md#route-round-trip). [lean4#15834](https://github.com/leanprover/lean4/issues/15834) asks Lean to add the `ByteArray` fold lemma that its proof needed.
 - [#11](https://github.com/paulbutcher/lean-routing/pull/11) matches requests with a trie. The maintainer welcomed one in [#8](https://github.com/paulbutcher/lean-routing/issues/8) if it kept the formal guarantees, and theorems prove that it picks the route `matchTable` picks.
 - [#12](https://github.com/paulbutcher/lean-routing/pull/12) lets a `Nat` capture match only the digits a link renders.
 - [#13](https://github.com/paulbutcher/lean-routing/pull/13) rejects an empty segment in a mount root. Such a root gave links to another host, as [#9](https://github.com/paulbutcher/lean-routing/issues/9) describes.
