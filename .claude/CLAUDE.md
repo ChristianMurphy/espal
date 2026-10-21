@@ -25,7 +25,7 @@ Reason about Espal's design from its goals in `README.md` and `ROADMAP.md`. Anot
 - Use `decide +kernel` for finite checks. Keep `native_decide`, `decide +native` and `bv_decide` out of any proof Espal cites, since they trust the compiler and add an axiom.
 - Bind every variable in a statement explicitly, so a misspelled name fails instead of becoming a new variable. Espal and its tests build with `autoImplicit` off, which enforces this, and other projects may not.
 - Register a fast path with `@[csimp]` and a proof that it equals the reference. Lean never checks `@[implemented_by]` code against the definition it replaces.
-- Pin the axioms of each headline theorem with `#guard_msgs in #print axioms`, so a new axiom fails the build at that theorem.
+- Pin the statement and the axioms of each headline theorem in `tests/EspalTests/Statements.lean`, with `#guard_msgs` on `#check` and `#print axioms`. A changed statement or a new axiom then fails the build.
 
 ## Proofs written by an agent
 

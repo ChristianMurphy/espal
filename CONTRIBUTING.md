@@ -67,6 +67,7 @@ Espal follows the layout of [lean-fmt](https://github.com/jcreinhold/lean-fmt). 
 
 - Put tests in the `tests/` package. It is a Lake package of its own, which keeps test-only dependencies such as Plausible out of the packages that require Espal. `lake test` at the root runs it.
 - When a proof takes a claim on trust, such as a property of `Std.Http`, give that claim a property test. Break the test once on purpose to show it can fail.
+- Pin the statement and the axioms of each headline theorem in `tests/EspalTests/Statements.lean`. Change a pin only in a commit that says why the statement changed.
 - Keep a few concrete examples for readers.
 - Add a `#guard_msgs` test for each mistake the API must reject.
 - Skip tests that only repeat a theorem.
