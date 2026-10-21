@@ -17,7 +17,7 @@ Espal checks permissions with [cedar-lean](https://github.com/cedar-policy/cedar
 
 ## What has to change upstream
 
-- **Binary size.** A program that only calls `isAuthorized` is 119 MB on Lean 4.35.0, against the 10 MB target. Four Batteries tactic modules, and the `Lean.ToJson` derivations in four files of `Cedar.Spec` and `Cedar.Data`, pull in the Lean package at run time. With both changed, the same program is 4.6 MB on 4.36.0-rc1, where the test ran. [cedar-spec#1056](https://github.com/cedar-policy/cedar-spec/issues/1056) asks about the JSON instances.
+- **Binary size.** A program that only calls `isAuthorized` is 119 MB on Lean 4.35.0, against the 10 MB target. Four Batteries tactic modules, and the `Lean.ToJson` derivations in four files of `Cedar.Spec` and `Cedar.Data`, pull in the Lean package at run time. With both changed, the same program is 4.6 MB on 4.36.0-rc1, where the test ran. [batteries#2034](https://github.com/leanprover-community/batteries/pull/2034) changes the Batteries imports, and [cedar-spec#1056](https://github.com/cedar-policy/cedar-spec/issues/1056) asks about the JSON instances.
 - **Theorems in the module system.** A module can't import `Cedar.Thm.Authorization`, which [cedar-spec#1057](https://github.com/cedar-policy/cedar-spec/issues/1057) asks about. Until it can, Espal proves the guarantees again over `isAuthorized`, as the trial did in 49 lines.
 - **Lean 4.36.** cedar-lean needs the three-line fix in `Cedar/Data/LT.lean`, which [cedar-spec#1058](https://github.com/cedar-policy/cedar-spec/issues/1058) offers.
 
