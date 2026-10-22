@@ -434,9 +434,9 @@ Here we pick the HTTP layer, the Postgres client and the libraries we keep. We a
 
 - Split the repository into the packages listed under Scope, with the `espal` package at the root.
 - Build the `api` macro on [lean-routing](docs/design/lean-routing.md)'s routes, with the reachability check on top. The route codec moves to bytes, and helpers become private.
-- An endpoint declares its method, path, parameters, body, response, typed errors, permission and statement budget.
+- An endpoint declares its method, path, parameters, body, response, typed errors, permission and statement budget. The [app code note](docs/design/app-code.md) sketches the endpoints of both example apps.
 - JSON on [lean-json](docs/design/lean-json.md), which imports only `Std`. `Lean.Data.Json` makes a server binary 120 MB, well over the 10 MB target. A `LawfulJson` deriving handler generates the round-trip proof that [client and server agreement](#client-and-server-agree) needs, and [streaming decoders](#streaming-decoders-agree-with-whole-body-decoders) come with the chunk-split proof.
-- Errors use problem details. A decode failure returns `400` and names the field.
+- Errors use problem details. Malformed JSON returns `400`. A body that fails its types or checks returns `422`, which names every failing field.
 - The default limits, memory bounds per request, `413` for oversized bodies, and the [memory pool](#memory-per-request-stays-within-a-declared-bound). Espal raises Std.Http's limit of 100 requests per keep-alive connection, which forces a proxy to reconnect often.
 - The route report and `Espal.escape`. The report includes what the earlier app audit found: `unsafe`, `extern`, `implemented_by`, `initialize` and extra axioms that handlers can reach, as [stateless handlers](#stateless-handlers) describes.
 - The OpenAPI 3.2.1 description.
@@ -597,6 +597,7 @@ These came out of the planning discussion in October 2026.
 - **Defaults.** Collections, problem details, safe writes, and an OpenAPI 3.2.1 description.
 - **Streaming.** Typed JSON in 0.1, MessagePack later.
 - **Route report.** One per route, with named escape hatches and a strict profile.
+- **App code.** A table names handler definitions, and each signature gives the handler's access, inputs, response, errors and statement budget. Decoders reject unknown keys, and each check is a proof field. The [app code note](docs/design/app-code.md) has the details.
 - **Contracts.** One prototype with `vcgen` in the query layer milestone before committing.
 - **Candidate dependencies.** lean-linq, lean-routing, LeanIO and cedar-lean, each evaluated during the spikes, and lean-json after them.
 - **Query core.** lean-linq's core, run by Espal's own Postgres client. Changes go upstream first, and a copy with its MIT notice is the fallback.
