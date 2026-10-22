@@ -28,4 +28,6 @@ description: Draft issues, pull requests and forum posts for projects other than
 
 - The person you're working for sends it. Write in the first person singular, as that person.
 - Give a chat post in a code block, checked against the platform's syntax. A Zulip topic holds 60 characters.
-- Give an issue or pull request as a link with the title and body filled in.
+- Give an issue or pull request as a link in the chat, with the title and body filled in. For a pull request, use the compare URL with `quick_pull=1`. Never point to a file path, since the person can't open files in the container.
+- Open the pull request before drafting comments that refer to it, so each reference has its real number. Never leave a placeholder.
+- When a maintainer merges one of your pull requests, update your other open ones on that project. Merge the base branch into each, then build and test it.
