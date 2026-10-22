@@ -22,7 +22,7 @@ Espal builds its routes on [lean-routing](https://github.com/paulbutcher/lean-ro
 
 - Endpoints that declare their parameters, body, response, typed errors, permission and statement budget on top of a `Route`.
 - The [route round trip](../../ROADMAP.md#route-round-trip), proved over lean-routing's `dispatch` and `linkFor`, as a lemma for [client and server agreement](../../ROADMAP.md#client-and-server-agree).
-- The check from [every endpoint is reachable](../../ROADMAP.md#every-endpoint-is-reachable). Dispatch takes the first route that matches, so an earlier route can hide a later one, and lean-routing doesn't report it. Espal's endpoint layer rejects that at compile time, including two routes with the same pattern.
+- The check from [every endpoint is reachable](../../ROADMAP.md#every-endpoint-is-reachable). Dispatch takes the first route that matches, so an earlier route can hide a later one, and lean-routing doesn't report it. Espal's endpoint layer rejects that at compile time, including two routes with the same method and pattern. Routes that share a pattern under different methods are fine.
 - One URL per resource. Since 0.11.0, lean-routing refuses `/users/042` and `/users/4_2`. Std.Http decodes the path before dispatch, though, so `/users/%34%32` still reaches user 42. Espal compares the request's encoded path with the link rebuilt from the captured values, and redirects when they differ.
 - Capture types beyond `Nat` and `String`, such as UUIDs and enumerations, over a `String` capture with a codec of Espal's own.
 - Typed query parameters, and the OpenAPI description, built from the patterns.
@@ -35,7 +35,8 @@ Espal needs no change to lean-routing. The trial led to pull requests that help 
 - [#11](https://github.com/paulbutcher/lean-routing/pull/11) matches requests with a trie. The maintainer welcomed one in [#8](https://github.com/paulbutcher/lean-routing/issues/8) if it kept the formal guarantees, and theorems prove that it picks the route `matchTable` picks.
 - [#12](https://github.com/paulbutcher/lean-routing/pull/12) lets a `Nat` capture match only the digits a link renders.
 - [#15](https://github.com/paulbutcher/lean-routing/pull/15) starts a link or slash redirect with `/./` when its first segment is empty, so browsers keep it on the same host. [#9](https://github.com/paulbutcher/lean-routing/issues/9) describes the bug. #15 replaced [#13](https://github.com/paulbutcher/lean-routing/pull/13), which rejected such a mount root instead.
-- [#16](https://github.com/paulbutcher/lean-routing/pull/16) rejects two `route_table` rows with the same pattern, and [#17](https://github.com/paulbutcher/lean-routing/pull/17) adds spacing and line-break hints to its syntax. Both are open.
+- [#17](https://github.com/paulbutcher/lean-routing/pull/17) adds spacing and line-break hints to the syntax of `route_table`, and is open.
+- [#16](https://github.com/paulbutcher/lean-routing/pull/16) would have rejected two `route_table` rows with the same pattern. It closed unmerged, because a row carries no method, so two rows can share a pattern for a GET and a POST.
 
 ## If lean-routing stalls
 

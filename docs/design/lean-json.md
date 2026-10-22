@@ -55,7 +55,11 @@ theorem fromJson?_parse_compress [ToJson α] [FromJson α] [LawfulJson α] [Wire
 
 ## Changes offered upstream
 
-Espal offers lean-json the two classes, `Json.numbers`, the deriving handler, and the lemma for parsing under a digit limit, before building them here.
+Espal offers lean-json these changes before building them here.
+
+- [lean-json#5](https://github.com/paulbutcher/lean-json/issues/5) asks for a lemma that gives the round trip under the parser's default digit limit.
+- [lean-json#6](https://github.com/paulbutcher/lean-json/issues/6) proposes `LawfulJson` and `WireJson`, with a deriving handler that proves them. It asks whether the finite-double rule belongs in `WireJson` or in Espal. `Json.numbers` waits on that answer.
+- [lean-json#7](https://github.com/paulbutcher/lean-json/issues/7) asks for decode errors that carry a path, and for an option to reject unknown keys. The [app code note](app-code.md) needs both.
 
 ## If lean-json stalls
 
