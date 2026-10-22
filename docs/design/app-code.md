@@ -1,6 +1,6 @@
 # What app code looks like
 
-This note sketches the code an author writes for the two [example apps](../../ROADMAP.md#example-apps), before the `api` macro and the model attribute exist. It sets the shape of the author's side first, so the macros and proofs serve that shape. Each piece names its evidence, using the roadmap's [kinds of evidence](../../ROADMAP.md#kinds-of-evidence), and each label gives the target for 0.1. The names are placeholders, and the [questions](#questions) at the end need answers before any macro work starts.
+This note sketches the code an author writes for the two [example apps](../../ROADMAP.md#example-apps), before the `api` macro and the model attribute exist. It sets the shape of the author's side first, so the macros and proofs serve that shape. Each piece names its evidence, using the roadmap's [kinds of evidence](../../ROADMAP.md#kinds-of-evidence), and each label gives the target for 0.1. The names are placeholders, and the [decisions](#decisions) at the end fix the shape.
 
 ## What we take from other frameworks
 
@@ -249,7 +249,7 @@ The [lean-json note](lean-json.md) records the decisions. This section covers wh
 - **Optional fields.** A field named `note?` is left out when it is `none`, and `null` and a missing key both decode to `none`. The TypeScript client types it as `note?: string`. `Option (Option α)` doesn't round trip, so update types use their own three-state type for nullable columns.
 - **Proof fields.** A decoder checks a decidable proof field, as `Title` and `Graded` do. We wrote one such codec by hand, and its round-trip theorem needed only `propext`.
 - **Error paths.** lean-json's derived decoders report `Order.items: Item.price: expected a number`. The message names types and fields but no array index, stops at the first failure, and reads a missing field as `null`. Problem details need a JSON Pointer such as `#/items/1/price`, every failure at once, and "missing" for a missing field. We would offer lean-json a structured decode error that carries the path.
-- **Unknown keys.** lean-json's derived decoders ignore keys the type doesn't have. The [questions](#questions) cover whether Espal rejects them.
+- **Unknown keys.** lean-json's derived decoders ignore keys the type doesn't have. Espal [rejects them](#decisions), so it needs either an option upstream or its own derived decoder.
 
 A bad request then gets one response that lists every failure. It follows the shape of RFC 9457's own example.
 
@@ -267,9 +267,11 @@ A bad request then gets one response that lists every failure. It follows the sh
 
 Malformed JSON gets `400`. A body that parses but fails its types or checks gets `422`, which RFC 9110 defines for content the server can parse but not process. The roadmap's packages milestone says `400` for both, and would change to match.
 
-## Questions
+## Decisions
 
-1. **Where handlers live.** The sketch uses a table that names handler definitions, with types read from their signatures. The prototype declared each endpoint's types in the table and implemented them all in one `match`. A third option puts an attribute such as `@[get "/db"]` on each definition.
-2. **Who may call a handler.** The sketch puts the access value in each signature, so the benchmark app writes `Public` five times. A table could instead mark a group of routes public once, with a `#guard_msgs` test that pins the list of public routes.
-3. **Unknown keys in a request.** Rejecting them catches typos and fields the server doesn't know. Ignoring them lets a newer client call an older server during a rolling deploy.
-4. **Validation as proof fields.** The sketch states each check as a proof field, which the handler, the decoder and the OpenAPI description share. The cost is that code building such a value must supply the proof.
+We settled these in October 2026, before any macro work.
+
+1. **Where handlers live.** A table names handler definitions, and the macro reads their types from their signatures. A handler stays an ordinary function that tests can call. We passed over the prototype's shape, which declared each endpoint's types in the table and implemented them all in one `match`. We also passed over an attribute such as `@[get "/db"]` on each definition, which spreads routes across files.
+2. **Who may call a handler.** Each signature takes an access value, `Public` or a `Scope`, so a new handler can't leave it out. A table that marks a group of routes public once would repeat less, but a route added to that group would be public until review caught it.
+3. **Unknown keys in a request.** Decoders reject them with a `422` that names the key, which catches typos and fields the server doesn't know. A newer client calling an older server then fails during a rolling deploy, so a new request field reaches the server before any client sends it.
+4. **Validation as proof fields.** Each check is a proof field, which the handler, the decoder and the OpenAPI description share. Code that builds such a value supplies the proof, with `by decide`, `by omega`, or an `if h :` test at run time.
