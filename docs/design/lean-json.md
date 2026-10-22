@@ -19,7 +19,7 @@ Espal reads and writes JSON with [lean-json](https://github.com/paulbutcher/lean
 ## What Espal adds
 
 - Two classes and a theorem, below. A deriving handler writes both instances for a structure or an inductive type.
-- Integers of 64 bits or more, such as `Nat`, `Int`, `UInt64` and `Int64`, travel as decimal strings, as [client and server agreement](../../ROADMAP.md#client-and-server-agree) says. Smaller integers travel as numbers. lean-json prints all of them as numbers, so Espal needs its own instances or wrapper types for the large ones.
+- Integers of 64 bits or more, such as `Nat`, `Int`, `UInt64` and `Int64`, travel as decimal strings, as [client and server agreement](../../ROADMAP.md#client-and-server-agree) says. Smaller integers travel as numbers. lean-json prints `Nat` and `Int` as numbers and `UInt64` as a string, and it has no instance for `Int64`. Espal needs its own instances or wrapper types for `Nat`, `Int` and `Int64`.
 - Streaming decoders with the [chunk-split proof](../../ROADMAP.md#streaming-decoders-agree-with-whole-body-decoders).
 
 ## The round-trip statements
