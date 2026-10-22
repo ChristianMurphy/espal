@@ -1,6 +1,6 @@
 # What app code looks like
 
-This note sketches the code an author writes for the two [example apps](../../ROADMAP.md#example-apps), before the `api` macro and the model attribute exist. We wrote the author's side first so the macros and proofs can fit it. Each piece of code names its evidence, using the roadmap's [kinds of evidence](../../ROADMAP.md#kinds-of-evidence), and each label is the target for 0.1. The names are placeholders. The [decisions](#decisions) at the end record what we settled, and one [question](#open-question) is still open.
+This note sketches the code an author writes for the two [example apps](../../ROADMAP.md#example-apps), before the `api` macro and the model attribute exist. We wrote the author's side first so the macros and proofs can fit it. Each piece of code names its evidence, using the roadmap's [kinds of evidence](../../ROADMAP.md#kinds-of-evidence), and each label is the target for 0.1. The names are placeholders. The [decisions](#decisions) at the end record what we settled.
 
 ## What we take from other frameworks
 
@@ -104,7 +104,7 @@ The first tenant endpoint grades a choice item by the rule of QTI's `mapResponse
 ```lean
 structure Item where
   mapping : List (ChoiceId × Int)
-  maxScore : Nat
+  maxScore : Small
   keysDistinct : (mapping.map (·.1)).Nodup
   deriving Json
 
@@ -114,19 +114,16 @@ structure Response where
 
 /-- A score between zero and the item's maximum. -/
 structure Graded where
-  score : Nat
-  maxScore : Nat
+  score : Small
+  maxScore : Small
   inRange : score ≤ maxScore
   deriving Json
 
 def grade (item : Item) (r : Response) : Graded :=
   let raw := ((item.mapping.filter (·.1 ∈ r.selected)).map (·.2)).sum
-  { score := min raw.toNat item.maxScore, maxScore := item.maxScore, inRange := by omega }
-
-/-- The score depends only on which choices the response selected. -/
-theorem grade_congr (item : Item) (r r' : Response)
-    (h : ∀ c, c ∈ r.selected ↔ c ∈ r'.selected) : grade item r = grade item r' := by
-  simp only [grade, h]
+  { score := ⟨min raw.toNat item.maxScore.val, by have := item.maxScore.lt; omega⟩
+    maxScore := item.maxScore
+    inRange := by simp; omega }
 
 structure GradeRequest where
   item : Item
@@ -137,15 +134,32 @@ def gradeItem (_ : Public) (body : GradeRequest) : Handler Graded :=
   return grade body.item body.response
 ```
 
-`inRange` keeps every score in range, and `omega` proves it. A handler can't return a `Graded` outside the range, because it can't build one without the proof. The decoder checks the same proposition, so a Lean client rejects a `Graded` that breaks it.
+`inRange` keeps every score in range, and `simp` and `omega` prove it. A handler can't return a `Graded` outside the range, because it can't build one without the proof. The decoder checks the same proposition, so a Lean client rejects a `Graded` that breaks it.
 
-A range proof says nothing about counting a choice twice. Take an item that maps `A` to 1 point and allows 3. A `grade` that summed every entry in `selected` would give `["A", "A", "A"]` full marks, and `inRange` would still hold. QTI 3 says a repeated value counts once, so `{B, B, C}` maps to 1.5 in its example and not 2.5. `grade_congr` rules out that bug, because repeating a choice doesn't change which choices the response holds. `keysDistinct` stops an item from mapping one choice twice, and the decoder checks it.
+`Small` is Espal's type for a count below 2^53. It travels as a JSON number, so a client reads `"score": 2`. It has no `+`, so two scores can't add up past the limit and wrap around. `Fin (2^53)` would give the same wire form, but its `+` wraps, so `(2^53 - 1) + 2` is 1. Proofs about `Small` need `simp` before `omega`, with a simp lemma that Espal ships.
 
-We compiled this code on Lean 4.35.0. `grade` scores `["A", "A", "A"]` as 1 on that item, and `grade_congr` uses only `propext` and `Quot.sound`.
+A range proof says nothing about whether the score is right. Take an item that maps `A` to 1 point and allows 3. A `grade` that summed every entry in `selected` would give `["A", "A", "A"]` full marks, and `inRange` would still hold. QTI 3 says a repeated value counts once, so `{B, B, C}` maps to 1.5 in its example and not 2.5. A wrong sign, a missing zero for an unmapped choice, or a misplaced clamp would also pass the range proof.
+
+So the author states QTI's rule as a second, plain definition, and proves that `grade` always matches it.
+
+```lean
+/-- The points QTI maps a choice to, with 0 for a choice the item doesn't map. -/
+def Item.pointsFor (item : Item) (c : ChoiceId) : Int :=
+  ((item.mapping.find? (·.1 == c)).map (·.2)).getD 0
+
+/-- QTI 3, section 2.11.1.5: sum the mapped value of each distinct selected choice, then clamp. -/
+def mapResponse (item : Item) (r : Response) : Int :=
+  max 0 (min ((r.selected.eraseDups.map item.pointsFor).sum) item.maxScore.val)
+
+theorem grade_eq_mapResponse (item : Item) (r : Response) :
+    ((grade item r).score.val : Int) = mapResponse item r
+```
+
+`mapResponse` follows the spec's sentence step by step. `grade` reaches the same number by walking the item's mapping, which counts each choice once. `keysDistinct` stops an item from mapping one choice twice, and the decoder checks it. `mapResponse` is code too, so a test checks it against QTI's own examples.
+
+Nobody has written the proof yet. It needs a lemma that `eraseDups` leaves no duplicates, which Lean 4.35's core lacks, so we'd write it in core's style and offer it upstream. We compiled the code above on Lean 4.35.0 with the proof left out. `grade` and `mapResponse` both score `["A", "A", "A"]` as 1 on that item.
 
 `gradeItem` is public until [sign-in](../../ROADMAP.md#sign-in-and-permissions) exists. [Every endpoint checks permission](../../ROADMAP.md#every-endpoint-checks-permission) still holds, because `Public` is the declared access.
-
-`score` and `maxScore` are `Nat`, which travels as a decimal string, so a client reads `"score": "2"`. The [open question](#open-question) asks whether scores should use a bounded type.
 
 ### Models
 
@@ -238,7 +252,8 @@ api Grading where
 | Code | What holds | Evidence |
 |---|---|---|
 | `inRange` | A score stays between zero and the item's maximum | Proved by the author, checked on decode |
-| `grade_congr` | Repeating a choice doesn't change the score | Proved by the author |
+| `grade_eq_mapResponse` | A score equals QTI's `mapResponse` for the same item and response | Proved by the author, once written |
+| `mapResponse` | The plain definition matches QTI's own examples | Tested |
 | `keysDistinct` | An item maps each choice at most once | Checked on decode |
 | `Scope Teacher` | Only sign-in can build a scope | Typed |
 | `Assessment.list s` | Every row returned belongs to the school | Proved over the model, by the prototype's `scopedSelect_tenant` |
@@ -252,7 +267,7 @@ api Grading where
 | idempotency key | A retry stores the submission once | Proved over the model, Tested |
 | Postgres policies | A raw query still can't cross schools | Enforced by Postgres |
 
-The author writes two proofs, `inRange` and `grade_congr`, and both are about grading. That meets the roadmap's target of proofs only for grading rules.
+The author writes two proofs, `inRange` and `grade_eq_mapResponse`, and both are about grading. That meets the roadmap's target of proofs only for grading rules.
 
 ## Messages for common mistakes
 
@@ -293,7 +308,7 @@ Setting a field the model owns, such as `{ body with teacher := t }`, already fa
 The [lean-json note](lean-json.md) records the JSON decisions. We checked each statement here about lean-json against its commit `4a0cf59`.
 
 - `deriving Json` gives `ToJson`, `FromJson`, `LawfulJson`, `WireJson` and the schema. An author meets the classes only when writing a codec by hand.
-- Integers of 64 bits or more, such as `Nat`, `Int`, `UInt64` and `Int64`, travel as decimal strings, as [client and server agreement](../../ROADMAP.md#client-and-server-agree) says. Smaller integers travel as numbers. lean-json writes `Nat` and `Int` as numbers and `UInt64` as a string. It has no instances for `Int64` or for the 8, 16 and 32-bit types, so Espal needs its own.
+- Integers of 64 bits or more, such as `Nat`, `Int`, `UInt64` and `Int64`, travel as decimal strings, as [client and server agreement](../../ROADMAP.md#client-and-server-agree) says. Smaller integers travel as numbers. lean-json writes `Nat` and `Int` as numbers and `UInt64` as a string. It has no instances for `Int64` or for the 8, 16 and 32-bit types, so Espal needs its own. Espal's `Small` travels as a number.
 - lean-json leaves out a field named `note?` when it is `none`, and it decodes both `null` and a missing key to `none`. The TypeScript client types the field as `note?: string`. `Option (Option α)` doesn't round trip, so update types use their own three-state type for nullable columns.
 - A decoder checks each decidable proof field, as in `Title`, `Item` and `Graded`. We wrote one such codec by hand, and its round-trip theorem needed only `propext`.
 - lean-json's derived decoders report errors such as `Order.items: Item.price: expected a number`. The message names types and fields but gives no array index. The decoder stops at the first failure and reads a missing field as `null`. Problem details need a JSON Pointer such as `#/items/1/price`, every failure at once, and "missing" for a missing field. We'd offer lean-json a structured decode error that includes the path.
@@ -323,7 +338,5 @@ We settled these in October 2026, before any macro work.
 2. Each signature takes an access value, `Public` or a `Scope`, so a new handler can't leave it out. A table that marked a group of routes public once would repeat less, but a route added to that group would be public until review caught it.
 3. Decoders reject keys a type doesn't have, with a `422` that names the key. That catches typos and fields the server doesn't know. A newer client calling an older server would then fail during a rolling deploy. So the generated client of each release sends only request fields that the previous release's server accepts, and CI checks that against the previous release's API description.
 4. Each check is a proof field, which the handler, the decoder and the OpenAPI description share. Code that builds such a value supplies the proof, with `by decide`, `by omega`, or an `if h :` test at run time.
-
-## Open question
-
-Scores use `Nat`, so `omega` writes their proofs, and they travel as strings. `UInt32` would travel as a number, but its range proof needs an `if h :` split and two lemmas, `UInt32.le_iff_toNat_le` and `UInt32.toNat_ofNat'`. We checked both versions on Lean 4.35.0. A third choice is an Espal type for counts below 2^53, which would travel as a number. Nobody has tried that type yet.
+5. Scores and other counts that need proofs use Espal's `Small`, a `Nat` below 2^53. It travels as a JSON number and has no `+`, so it can't wrap. We passed over `Nat`, which travels as a string, `UInt32`, whose range proof needs two `toNat` lemmas, and `Fin (2^53)`, whose `+` wraps.
+6. The grading theorem states QTI's rule as its own definition, `mapResponse`, and proves that `grade` matches it. That pins the exact score. A theorem that a repeated choice leaves the score unchanged would rule out only one bug.
