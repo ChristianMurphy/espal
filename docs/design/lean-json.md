@@ -1,0 +1,68 @@
+# lean-json for JSON
+
+Espal reads and writes JSON with [lean-json](https://github.com/paulbutcher/lean-json), and adds a round-trip class whose instances a deriving handler proves. This note records the decision for the JSON part of the [packages, endpoints and the JSON API](../../ROADMAP.md#packages-endpoints-and-the-json-api) milestone, made in October 2026. It covers lean-json at commit `4a0cf59`, on Lean 4.35.0.
+
+## What Espal takes
+
+- The `Json` value type. Objects keep their order, and a number is an `Int` mantissa with an `Int` exponent.
+- `parse`, `parseBytes` and `compress`, with lean-json's strict defaults. The parser refuses repeated keys and lone surrogates, nesting deeper than 1,024 levels, and numbers longer than 1,000 digits.
+- The `ToJson` and `FromJson` classes, and their instances for common types.
+
+## Why
+
+- It imports only `Std`. A program that parses and prints JSON with it is 3.3 MB stripped, while `Lean.Data.Json` made the spike's server 120 MB.
+- Paul Butcher proves its parser sound and complete against the grammar of RFC 8259. `parse_compress` proves that parsing printed JSON gives the same value back. These proofs use only `propext`, `Classical.choice` and `Quot.sound`.
+- It has no `sorry`, `partial`, `unsafe`, `implemented_by` or `extern`. Its traversals keep pending work on the heap, so deep nesting gives an error, not a crash.
+- It built with no warnings on Lean 4.35.0, and its tests passed.
+- Building the same parts ourselves would go against the [contributing guide](../../CONTRIBUTING.md), which prefers an existing library under a compatible license.
+
+## What Espal adds
+
+- Two classes and a theorem, below. A deriving handler writes both instances for a structure or an inductive type.
+- Integers of 64 bits or more, such as `Nat`, `Int`, `UInt64` and `Int64`, travel as decimal strings, as [client and server agreement](../../ROADMAP.md#client-and-server-agree) says. Smaller integers travel as numbers. lean-json prints all of them as numbers, so Espal needs its own instances or wrapper types for the large ones.
+- Streaming decoders with the [chunk-split proof](../../ROADMAP.md#streaming-decoders-agree-with-whole-body-decoders).
+
+## The round-trip statements
+
+```lean
+/-- `fromJson?` reads back what `toJson` writes. -/
+class LawfulJson (α : Type u) [ToJson α] [FromJson α] : Prop where
+  fromJson?_toJson (x : α) : fromJson? (toJson x) = .ok x
+
+/-- Every number in `j` is exactly a finite IEEE 754 double. -/
+def DoubleNumbers (j : Json) : Prop :=
+  ∀ n ∈ j.numbers, ∃ f : Float, Number.ofFloat? f = some n
+
+/-- What `toJson` writes prints as text that the parser, and a JavaScript reader, read back
+unchanged. -/
+class WireJson (α : Type u) [ToJson α] : Prop where
+  canonicalNumbers (x : α) : (toJson x).CanonicalNumbers
+  uniqueKeys (x : α) : (toJson x).UniqueKeys
+  doubleNumbers (x : α) : DoubleNumbers (toJson x)
+
+/-- The full trip through text, with the parser's default settings. -/
+theorem fromJson?_parse_compress [ToJson α] [FromJson α] [LawfulJson α] [WireJson α]
+    (x : α) (hdepth : (toJson x).depth ≤ 1024) :
+    ((parse (compress (toJson x))).toOption.bind
+      fun j => (fromJson? j : Except String α).toOption) = some x
+```
+
+- `LawfulJson` covers the trip from a value to a tree and back. A handwritten instance can prove this class alone.
+- `WireJson` adds what printing and parsing need. A number has one spelling, and no object repeats a key.
+- `DoubleNumbers` covers JavaScript readers. `JSON.parse` rounds each number to the nearest double, so a number that is already a double reads back unchanged. Lean can't prove a claim about JavaScript, so a Node test checks the values Espal prints.
+- Depth appears once, as the theorem's hypothesis, since no class can bound the depth of every value of a recursive type.
+- The theorem covers the default settings, which keep the 1,000-digit limit. `parse_compress` holds only with that limit off. The longest exact decimal of a double has 767 digits, so `DoubleNumbers` keeps every number within the limit. The proof needs one more lemma in lean-json, which covers parsing under a digit limit.
+
+## Changes offered upstream
+
+Espal offers lean-json the two classes, `Json.numbers`, the deriving handler, and the lemma for parsing under a digit limit, before building them here.
+
+## If lean-json stalls
+
+Espal copies the library with its Apache 2.0 notice, as the contributing guide allows, and keeps it current by hand. That happens if lean-json stops following Lean releases or turns down a change Espal needs.
+
+## Risks
+
+- One person maintains lean-json, and its first release came in October 2026.
+- `parseBytes` checks UTF-8 and then parses a `String`, which costs a copy of each request body. A parser that reads bytes directly would avoid it.
+- Espal's instances for large integers must not clash with lean-json's instances for the same types.
