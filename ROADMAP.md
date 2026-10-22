@@ -145,7 +145,7 @@ Each property names the evidence behind it, using the kinds above.
 
 A link built from a route's parameters dispatches back to that route with the same parameters. The theorem covers the path as segments, and [client and server agreement](#client-and-server-agree) uses it as a lemma. Espal proves it over lean-routing's `dispatch` and `linkFor`. A prototype of the proof took about 90 lines, with `Nat.toNat?_repr` from Lean's standard library.
 
-Each resource gets one URL. lean-routing reaches user 42 at `/users/042`, `/users/4_2` and `/users/%34%32` as well as `/users/42`. Espal rebuilds the link from the captured values, compares it with the request's encoded path, and redirects when they differ. That check at run time also covers percent-encoding, which a proof about the parser can't reach.
+Each resource gets one URL. Since 0.11.0, lean-routing refuses `/users/042` and `/users/4_2`. Std.Http decodes the path before dispatch, though, so `/users/%34%32` still reaches user 42. Espal rebuilds the link from the captured values, compares it with the request's encoded path, and redirects when they differ. That check at run time also covers percent-encoding, which a proof about the parser can't reach.
 
 The proof assumes the HTTP layer passes the path through unchanged. Percent-decoding, `..`, doubled or trailing slashes, and a proxy that rewrites paths all happen outside it. A test sends each of these cases through the real server.
 
