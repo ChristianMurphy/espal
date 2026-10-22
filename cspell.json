@@ -1,0 +1,46 @@
+{
+  "version": "0.2",
+  "language": "en-US",
+  "ignorePaths": [
+    "**/.lake/**"
+  ],
+  "ignoreRegExpList": [
+    "/^\\s*```[\\s\\S]*?^\\s*```/gm",
+    "/`[^`\\n]*`/g",
+    "/\\]\\([^)]*\\)/g",
+    "/https?:\\/\\/\\S+/g"
+  ],
+  "words": [
+    "Benchmarkers",
+    "bubblewrap",
+    "chrisflav",
+    "ecyrbe",
+    "Espal",
+    "FOSS",
+    "gunicorn",
+    "HMAC",
+    "htmx",
+    "httptools",
+    "lakefile",
+    "leanio",
+    "leanprover",
+    "leansqlite",
+    "libmysqlclient",
+    "libpq",
+    "libsqlite",
+    "libuv",
+    "linq",
+    "Mathlib",
+    "metaprograms",
+    "metavariable",
+    "nanoda",
+    "sandboxed",
+    "unsqueezed",
+    "uvicorn",
+    "uvloop",
+    "WCAG",
+    "wordmark",
+    "YJIT",
+    "Zulip"
+  ]
+}
