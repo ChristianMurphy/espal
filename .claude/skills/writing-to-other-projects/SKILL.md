@@ -16,6 +16,7 @@ description: Draft issues, pull requests and forum posts for projects other than
 - A short example or a link to the docs often explains more than another paragraph.
 - Split a pull request longer than a few paragraphs into short sections, such as how it works, guarantees, performance and notes. Keep each bullet to one or two sentences.
 - Where you're new, ask before proposing. Keep a first post short, and skip @-mentions.
+- Use the spelling the project's own docs use. lean-json writes British English, such as `normalisation`. For a British project, run cspell with `--locale en-GB`. It catches `behavior` but accepts `color`, so reread for the rest.
 
 ## Before drafting
 

@@ -145,7 +145,7 @@ Each property names the evidence behind it, using the kinds above.
 
 A link built from a route's parameters dispatches back to that route with the same parameters. The theorem covers the path as segments, and [client and server agreement](#client-and-server-agree) uses it as a lemma. Espal proves it over lean-routing's `dispatch` and `linkFor`. A prototype of the proof took about 90 lines, with `Nat.toNat?_repr` from Lean's standard library.
 
-Each resource gets one URL. lean-routing reaches user 42 at `/users/042`, `/users/4_2` and `/users/%34%32` as well as `/users/42`. Espal rebuilds the link from the captured values, compares it with the request's encoded path, and redirects when they differ. That check at run time also covers percent-encoding, which a proof about the parser can't reach.
+Each resource gets one URL. Since 0.11.0, lean-routing refuses `/users/042` and `/users/4_2`. Std.Http decodes the path before dispatch, though, so `/users/%34%32` still reaches user 42. Espal rebuilds the link from the captured values, compares it with the request's encoded path, and redirects when they differ. That check at run time also covers percent-encoding, which a proof about the parser can't reach.
 
 The proof assumes the HTTP layer passes the path through unchanged. Percent-decoding, `..`, doubled or trailing slashes, and a proxy that rewrites paths all happen outside it. A test sends each of these cases through the real server.
 
@@ -159,7 +159,7 @@ Each endpoint's proof steps through every earlier endpoint, so total proof time 
 
 The prototype proves two theorems. `dispatch_request` shows that a request built by the client reaches the intended handler with the same parameters and body. `decode_respond` shows that the client decodes a response to the value the handler returned.
 
-Both need a `LawfulJson` instance for every body type, meaning `fromJson? (toJson a) = .ok a`. Lean's derived `ToJson` and `FromJson` instances come without that proof. Espal needs a deriving handler that generates it.
+Both need a `LawfulJson` instance for every body type, meaning `fromJson? (toJson a) = .ok a`. The derived `ToJson` and `FromJson` instances of Lean and of lean-json come without that proof. Espal needs a deriving handler that generates it. The [lean-json note](docs/design/lean-json.md) states the classes and the theorem for the full trip through text.
 
 The guarantee breaks in four places:
 
@@ -434,9 +434,9 @@ We finished this milestone. It picked the HTTP layer, the Postgres client and th
 
 - Split the repository into the packages listed under Scope, with the `espal` package at the root.
 - Build the `api` macro on [lean-routing](docs/design/lean-routing.md)'s routes, with the reachability check on top. The route codec moves to bytes, and helpers become private.
-- An endpoint declares its method, path, parameters, body, response, typed errors, permission and statement budget.
-- JSON encoding of our own, since `Lean.Data.Json` makes a server binary 120 MB, well over the 10 MB target. A `LawfulJson` deriving handler generates the round-trip proof that [client and server agreement](#client-and-server-agree) needs, and [streaming decoders](#streaming-decoders-agree-with-whole-body-decoders) come with the chunk-split proof.
-- Errors use problem details. A decode failure returns `400` and names the field.
+- An endpoint declares its method, path, parameters, body, response, typed errors, permission and statement budget. The [app code note](docs/design/app-code.md) sketches the endpoints of both example apps.
+- JSON on [lean-json](docs/design/lean-json.md), which imports only `Std`. `Lean.Data.Json` makes a server binary 120 MB, well over the 10 MB target. A `LawfulJson` deriving handler generates the round-trip proof that [client and server agreement](#client-and-server-agree) needs, and [streaming decoders](#streaming-decoders-agree-with-whole-body-decoders) come with the chunk-split proof.
+- Errors use problem details. Malformed JSON returns `400`. A body that fails its types or checks returns `422`, which names every failing field.
 - The default limits, memory bounds per request, `413` for oversized bodies, and the [memory pool](#memory-per-request-stays-within-a-declared-bound). Espal raises Std.Http's limit of 100 requests per keep-alive connection, which forces a proxy to reconnect often.
 - The route report and `Espal.escape`. The report includes what the earlier app audit found: `unsafe`, `extern`, `implemented_by`, `initialize` and extra axioms that handlers can reach, as [stateless handlers](#stateless-handlers) describes.
 - The OpenAPI 3.2.1 description.
@@ -598,12 +598,14 @@ These came out of the planning discussion in October 2026.
 - **Defaults.** Collections, problem details, safe writes, and an OpenAPI 3.2.1 description.
 - **Streaming.** Typed JSON in 0.1, MessagePack later.
 - **Route report.** One per route, with named escape hatches and a strict profile.
+- **App code.** A table names handler definitions, and each signature gives the handler's access, inputs, response, errors and statement budget. Decoders reject unknown keys, and each check is a proof field. The [app code note](docs/design/app-code.md) has the details.
 - **Contracts.** One prototype with `vcgen` in the query layer milestone before committing.
-- **Candidate dependencies.** lean-linq, lean-routing, LeanIO and cedar-lean, each evaluated during the spikes.
+- **Candidate dependencies.** lean-linq, lean-routing, LeanIO and cedar-lean, each evaluated during the spikes, and lean-json after them.
 - **Query core.** lean-linq's core, run by Espal's own Postgres client. Changes go upstream first, and a copy with its MIT notice is the fallback.
 - **Router.** lean-routing as it is, with Espal's endpoints, reachability check and canonical-path redirect on top. A copy with its Apache 2.0 notice is the fallback.
 - **Permission engine.** cedar-lean's authorizer, with changes upstream first. A copy of `Cedar.Spec` with its Apache 2.0 notice is the fallback.
 - **Uploads, ranges and ETags.** Espal's own, with a chunk-split proof for the multipart parser. LeanIO stays out.
+- **JSON.** lean-json, with a round-trip class whose instances a deriving handler proves. Changes go upstream first, and a copy with its Apache 2.0 notice is the fallback.
 - **Tenant app.** A QTI-shaped grading app, without XML import at first.
 - **Load target.** 100,000 submissions within one minute at the end of an exam.
 - **Databases in 0.1.** Postgres only.

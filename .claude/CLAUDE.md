@@ -42,6 +42,7 @@ Reason about Espal's design from its goals in `README.md` and `ROADMAP.md`. Anot
 - Scan all text meant for people with Vale, using the AiTells and Voices styles, and with LanguageTool. That covers docs, design notes, commit messages, issues, pull requests and chat posts. Then reread it, since neither catches everything.
 - Neither tool catches a figure of speech such as "pays for it twice". Say what happens instead, and run a humanize pass if your setup has one.
 - Vale reads a sentence that ends in a version number, such as 4.36.0, as running into the next one. Rephrase to clear that length error.
+- Use American spelling, such as "behavior". Check the same text with `npx cspell@10.4.0 -c cspell.json`, and pipe text from outside the repository through `--language-id markdown stdin`. `cspell.json` lists the names and terms cspell accepts, so check a new name's spelling before adding it.
 - Use concrete verbs, and name the concrete fact, such as the error, the file or what breaks. Words such as "there" or "carry over" that stand in for a fact leave the reader guessing.
 - Avoid stock phrases and inflated claims. State design goals as goals.
 - Keep sentences under about 25 words. Write plain sentences rather than a colon before the point.
@@ -60,7 +61,7 @@ Reason about Espal's design from its goals in `README.md` and `ROADMAP.md`. Anot
 ## Working with the person
 
 - When they ask to discuss something, answer in chat with the options and trade-offs before changing any file.
-- When you need a decision, ask it as a multiple-choice question. Give each option its trade-off, and put your recommendation first.
+- Ask each question with the question tool, as a multiple-choice question, including offers of next steps. Give each option its trade-off, and put your recommendation first. When a question needs background, write it in the chat first.
 - When a word in a request could mean two things, say which reading you took.
 - The Espal repository is public. Keep an unfixed security finding, in Espal or any other project, out of its files, branches, commit messages, issues and comments. Report it in chat and through the affected project's private channel.
 
