@@ -1,0 +1,9 @@
+name = "espal-client"
+version = "0.0.1"
+description = "The OpenAPI description and TypeScript client for an Espal app"
+license = "Apache-2.0"
+defaultTargets = ["EspalClient"]
+
+[[lean_lib]]
+name = "EspalClient"
+leanOptions = { autoImplicit = false, linter.missingDocs = true }

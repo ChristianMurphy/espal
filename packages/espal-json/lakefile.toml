@@ -1,0 +1,9 @@
+name = "espal-json"
+version = "0.0.1"
+description = "Lawful and streaming JSON codecs for Espal"
+license = "Apache-2.0"
+defaultTargets = ["EspalJson"]
+
+[[lean_lib]]
+name = "EspalJson"
+leanOptions = { autoImplicit = false, linter.missingDocs = true }

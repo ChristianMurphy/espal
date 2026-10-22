@@ -1,0 +1,9 @@
+name = "espal-model"
+version = "0.0.1"
+description = "Espal's model attribute, migrations and fixtures"
+license = "Apache-2.0"
+defaultTargets = ["EspalModel"]
+
+[[lean_lib]]
+name = "EspalModel"
+leanOptions = { autoImplicit = false, linter.missingDocs = true }

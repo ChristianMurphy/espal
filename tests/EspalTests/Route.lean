@@ -1,7 +1,7 @@
 module
 
-import Espal.Route
-meta import Espal.Route
+import EspalRoute
+meta import EspalRoute
 
 /-! Tests for the decimal path codec in `Espal.Route`. -/
 

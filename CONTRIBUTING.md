@@ -35,7 +35,8 @@ Espal follows the layout of [lean-fmt](https://github.com/jcreinhold/lean-fmt). 
 
 ### Structure
 
-- Give each module one concept, such as `Espal/Route.lean` or `Espal/Route/Codec.lean`.
+- Give each module one concept, such as `packages/espal-route/EspalRoute.lean` or `packages/espal-route/EspalRoute/Codec.lean`.
+- Start each package's modules with the package's own root, such as `EspalRoute`, and put its declarations in the namespace `Espal.<Area>`, such as `Espal.Route`. Lean looks for a module's first name component in one package only, so two packages can't share a module root.
 - Keep a definition and its theorems in the same file, so a change and its proof break together.
 - Mark only the API `public`, and keep helpers private to their module. A few entry modules, such as `Espal`, re-export the API.
 

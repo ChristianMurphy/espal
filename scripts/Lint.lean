@@ -9,8 +9,10 @@ import LintRules
 /-!
 # Espal lint
 
-Checks the compiled declarations of every module under a root (default `Espal`) against the code
-style rules in `CONTRIBUTING.md`, with the checks in `scripts/LintRules.lean`:
+Checks the compiled declarations of every module that a root imports from Espal's packages against
+the code style rules in `CONTRIBUTING.md`, with the checks in `scripts/LintRules.lean`. The default
+root, `Espal`, imports every package, and each package's modules start with `Espal`, such as
+`EspalRoute`. The rules are these:
 
 * no `unsafe` or `partial` declarations;
 * no calls to panicking functions: `panic!` and any constant whose name ends in `!`;
@@ -32,7 +34,7 @@ def main (args : List String) : IO UInt32 := do
   for (n, ci) in env.constants.map₁.toList do
     let some idx := env.getModuleIdxFor? n | continue
     let some mod := env.header.moduleNames[idx.toNat]? | continue
-    unless root.isPrefixOf mod do
+    unless mod.getRoot.toString.startsWith root.getRoot.toString do
       continue
     for msg in check env n ci do
       IO.eprintln s!"{mod}: `{n}` {msg}"

@@ -54,7 +54,7 @@ Each battery is its own Lake package in this repository, and each works without 
 | `espal-client` | The OpenAPI description and the TypeScript client |
 | `espal-cli` | The `espal` command |
 
-Package names follow `espal-<area>`, and each package's modules live under `Espal.<Area>`, such as `Espal.Query`. No package depends on one listed below it. An app that wants a single package names it with `subDir` in its `[[require]]` entry. Reservoir lists only packages at a repository root, so only `espal` appears there.
+Package names follow `espal-<area>`, and each package lives in `packages/espal-<area>`. Its modules start with a root of their own, such as `EspalQuery`, and its declarations live in the namespace `Espal.<Area>`, such as `Espal.Query`. Lean looks for a module's first name component in one package only, so two packages can't share a module root. No package depends on one listed below it. An app that wants a single package names it with `subDir = "packages/espal-<area>"` in its `[[require]]` entry. Reservoir lists only packages at a repository root, so only `espal` appears there.
 
 ### Building on other projects
 
@@ -432,7 +432,7 @@ Here we pick the HTTP layer, the Postgres client and the libraries we keep. We a
 
 ### Packages, endpoints and the JSON API
 
-- Split the repository into the packages listed under Scope, with the `espal` package at the root.
+- Split the repository into the packages listed under Scope, with the `espal` package at the root (done).
 - Build the `api` macro on [lean-routing](docs/design/lean-routing.md)'s routes, with the reachability check on top. The route codec moves to bytes, and helpers become private.
 - An endpoint declares its method, path, parameters, body, response, typed errors, permission and statement budget. The [app code note](docs/design/app-code.md) sketches the endpoints of both example apps.
 - JSON on [lean-json](docs/design/lean-json.md), which imports only `Std`. `Lean.Data.Json` makes a server binary 120 MB, well over the 10 MB target. A `LawfulJson` deriving handler generates the round-trip proof that [client and server agreement](#client-and-server-agree) needs, and [streaming decoders](#streaming-decoders-agree-with-whole-body-decoders) come with the chunk-split proof.
