@@ -175,7 +175,7 @@ structure Course where
 structure Assessment where
   @[generated] id : Key Assessment
   @[owner Teacher] teacher : Key Teacher
-  @[reach Student via Enrolment] course : Key Course
+  @[reach Student via Enrollment] course : Key Course
   title : Title
   closesAt : Instant
   @[generated] createdAt : Instant
@@ -231,7 +231,7 @@ def showSubmission (s : Scope Student) (id : Key Submission) :
   Submission.get s id
 ```
 
-`Assessment.find s` reaches an assessment only through the student's enrolments, as the model's `reach` attribute declares. `SubmitError` lists the errors `submit` can return, and the generated TypeScript client gets them as a discriminated union. `now` comes from the interpreter, so a test can set the clock.
+`Assessment.find s` reaches an assessment only through the student's enrollments, as the model's `reach` attribute declares. `SubmitError` lists the errors `submit` can return, and the generated TypeScript client gets them as a discriminated union. `now` comes from the interpreter, so a test can set the clock.
 
 `submit` doesn't mention retries. POST endpoints accept an idempotency key by default, and the generated client sends one, so a client that retries after a timeout still stores one submission.
 
