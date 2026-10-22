@@ -14,6 +14,7 @@
     "Benchmarkers",
     "bubblewrap",
     "chrisflav",
+    "combinators",
     "ecyrbe",
     "Espal",
     "FOSS",
@@ -40,6 +41,7 @@
     "uvloop",
     "WCAG",
     "wordmark",
+    "Yesod",
     "YJIT",
     "Zulip"
   ]
