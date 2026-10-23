@@ -5,6 +5,8 @@ Authors: Christian Murphy
 -/
 module
 
+public import EspalRoute.Table
+
 /-!
 # Typed routes
 

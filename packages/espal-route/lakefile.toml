@@ -4,6 +4,11 @@ description = "Typed routes and links for Espal"
 license = "Apache-2.0"
 defaultTargets = ["EspalRoute"]
 
+[[require]]
+name = "routing"
+git = "https://github.com/paulbutcher/lean-routing"
+rev = "v0.11.0"
+
 [[lean_lib]]
 name = "EspalRoute"
 leanOptions = { autoImplicit = false, linter.missingDocs = true }
