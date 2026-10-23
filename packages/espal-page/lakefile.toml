@@ -1,0 +1,9 @@
+name = "espal-page"
+version = "0.0.1"
+description = "JSX pages, forms and partial updates for Espal"
+license = "Apache-2.0"
+defaultTargets = ["EspalPage"]
+
+[[lean_lib]]
+name = "EspalPage"
+leanOptions = { autoImplicit = false, linter.missingDocs = true }

@@ -1,0 +1,9 @@
+name = "espal-query"
+version = "0.0.1"
+description = "Espal's query layer, statement budgets, evaluator and SQL dialects"
+license = "Apache-2.0"
+defaultTargets = ["EspalQuery"]
+
+[[lean_lib]]
+name = "EspalQuery"
+leanOptions = { autoImplicit = false, linter.missingDocs = true }

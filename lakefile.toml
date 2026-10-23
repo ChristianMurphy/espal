@@ -7,6 +7,50 @@ defaultTargets = ["Espal"]
 testDriver = "tests"
 lintDriver = "lint"
 
+[[require]]
+name = "espal-core"
+path = "packages/espal-core"
+
+[[require]]
+name = "espal-route"
+path = "packages/espal-route"
+
+[[require]]
+name = "espal-json"
+path = "packages/espal-json"
+
+[[require]]
+name = "espal-http"
+path = "packages/espal-http"
+
+[[require]]
+name = "espal-query"
+path = "packages/espal-query"
+
+[[require]]
+name = "espal-model"
+path = "packages/espal-model"
+
+[[require]]
+name = "espal-page"
+path = "packages/espal-page"
+
+[[require]]
+name = "espal-auth"
+path = "packages/espal-auth"
+
+[[require]]
+name = "espal-jobs"
+path = "packages/espal-jobs"
+
+[[require]]
+name = "espal-client"
+path = "packages/espal-client"
+
+[[require]]
+name = "espal-cli"
+path = "packages/espal-cli"
+
 [[lean_lib]]
 name = "Espal"
 leanOptions = { autoImplicit = false, linter.missingDocs = true }

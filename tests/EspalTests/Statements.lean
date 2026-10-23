@@ -1,6 +1,6 @@
 module
 
-import Espal.Route
+import EspalRoute
 
 /-!
 Pins the statement and the axioms of each headline theorem, so a change to either fails the build.

@@ -35,13 +35,14 @@ Espal follows the layout of [lean-fmt](https://github.com/jcreinhold/lean-fmt). 
 
 ### Structure
 
-- Give each module one concept, such as `Espal/Route.lean` or `Espal/Route/Codec.lean`.
+- Give each module one concept, such as `packages/espal-route/EspalRoute.lean` or `packages/espal-route/EspalRoute/Codec.lean`.
+- Start each package's modules with the package's own root, such as `EspalRoute`, and put its declarations in the namespace `Espal.<Area>`, such as `Espal.Route`. Lean looks for a module's first name component in one package only, so two packages can't share a module root.
 - Keep a definition and its theorems in the same file, so a change and its proof break together.
 - Mark only the API `public`, and keep helpers private to their module. A few entry modules, such as `Espal`, re-export the API.
 
 ### Correctness
 
-- Library code never uses `sorry`. `lake lint` and lean-action's axiom audit check every declaration in Espal's modules. Each fails on any axiom beyond `propext`, `Classical.choice` and `Quot.sound`, which rules out `sorry` and `native_decide`. Both start from the `Espal` module, so import each new module from it.
+- Library code never uses `sorry`. `lake lint` and `lake check` check every declaration in Espal's packages. Each fails on any axiom beyond `propext`, `Classical.choice` and `Quot.sound`, which rules out `sorry` and `native_decide`. Both start from the `Espal` module, so import each new module from it.
 - Library code avoids `partial def`, `unsafe`, `panic!` and `!` indexing. Prove totality, or encode the failure in the type.
 - Return errors as values, with `Except` or a typed error union. Do not throw IO exceptions across the framework boundary.
 

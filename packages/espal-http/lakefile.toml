@@ -1,0 +1,9 @@
+name = "espal-http"
+version = "0.0.1"
+description = "The Espal server, request limits and admission control"
+license = "Apache-2.0"
+defaultTargets = ["EspalHttp"]
+
+[[lean_lib]]
+name = "EspalHttp"
+leanOptions = { autoImplicit = false, linter.missingDocs = true }

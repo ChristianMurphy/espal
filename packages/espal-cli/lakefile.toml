@@ -1,0 +1,9 @@
+name = "espal-cli"
+version = "0.0.1"
+description = "The espal command"
+license = "Apache-2.0"
+defaultTargets = ["EspalCli"]
+
+[[lean_lib]]
+name = "EspalCli"
+leanOptions = { autoImplicit = false, linter.missingDocs = true }
