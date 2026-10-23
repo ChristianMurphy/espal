@@ -5,6 +5,7 @@ Authors: Christian Murphy
 -/
 module
 
+public import EspalRoute.Api
 public import EspalRoute.Table
 
 /-!

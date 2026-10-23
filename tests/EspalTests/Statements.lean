@@ -67,3 +67,19 @@ info: Espal.Route.natAccepts_eq : ∀ (s : String), Espal.Route.natAccepts s = (
 /-- info: 'Espal.Route.natAccepts_eq' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms Espal.Route.natAccepts_eq
+
+/--
+info: @Espal.Api.matchTable_pathOf : ∀ {α : Type} (t : Espal.Api α) (i : Fin t.routes.length)
+  (args : Espal.Route.Args t.routes[i].segs),
+  Espal.Route.Linkable t.routes[i].segs args →
+    Routing.matchTable t.routes t.routes[i].method (Espal.Route.pathOf t.routes[i].segs args) =
+      some
+        ({ method := t.routes[i].method, segs := t.routes[i].segs },
+          Espal.Route.applyHandler t.routes[i].segs t.routes[i].handler args)
+-/
+#guard_msgs in
+#check @Espal.Api.matchTable_pathOf
+
+/-- info: 'Espal.Api.matchTable_pathOf' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.Api.matchTable_pathOf
