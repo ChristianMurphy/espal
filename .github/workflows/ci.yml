@@ -24,17 +24,17 @@ jobs:
         with:
           persist-credentials: false
 
-      # Builds with warnings as errors, runs `lake test` and `lake lint`, re-checks every
-      # declaration with Lean's kernel checker, and fails on any axiom outside the standard three.
-      # lean-action's nanoda step expects a `[package]` table and a root module named after the
-      # package, which this lakefile does not have, so nanoda runs from `paranoid.yml` instead.
+      # Builds with warnings as errors, runs `lake test` and `lake lint`, and re-checks every
+      # declaration with Lean's kernel checker. lean-action's nanoda step expects a `[package]`
+      # table and a root module named after the package, which this lakefile does not have, so
+      # nanoda runs from `paranoid.yml` instead. Its axiom-audit step audits one module root, and
+      # each package has its own, so `lake lint` and `lake check` below check the axioms instead.
       - uses: leanprover/lean-action@24581d74d674803a25a81b10b059c5c0cdd344c6 # v1.6.2
         with:
           build-args: "--wfail"
           test: "true"
           lint: "true"
           leanchecker: "true"
-          axiom-audit: "true"
 
       # Ubuntu 24.04 blocks the unprivileged user namespaces that bubblewrap needs.
       - name: Install bubblewrap for lake check
