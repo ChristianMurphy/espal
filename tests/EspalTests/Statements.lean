@@ -40,3 +40,30 @@ info: 'Espal.Route.natSeg_ne_of_parseNatSeg_none' depends on axioms: [propext, C
 -/
 #guard_msgs in
 #print axioms Espal.Route.natSeg_ne_of_parseNatSeg_none
+
+/--
+info: @Espal.Route.matchTable_pathOf : ∀ {α : Type} {routes : List (Routing.Route α)},
+  Espal.Route.linksDisjoint routes = true →
+    ∀ (i : Fin routes.length) (args : Espal.Route.Args routes[i].segs),
+      Espal.Route.Linkable routes[i].segs args →
+        Routing.matchTable routes routes[i].method (Espal.Route.pathOf routes[i].segs args) =
+          some
+            ({ method := routes[i].method, segs := routes[i].segs },
+              Espal.Route.applyHandler routes[i].segs routes[i].handler args)
+-/
+#guard_msgs in
+#check @Espal.Route.matchTable_pathOf
+
+/-- info: 'Espal.Route.matchTable_pathOf' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.Route.matchTable_pathOf
+
+/--
+info: Espal.Route.natAccepts_eq : ∀ (s : String), Espal.Route.natAccepts s = (Routing.Internal.parseNat? s).isSome
+-/
+#guard_msgs in
+#check @Espal.Route.natAccepts_eq
+
+/-- info: 'Espal.Route.natAccepts_eq' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.Route.natAccepts_eq
