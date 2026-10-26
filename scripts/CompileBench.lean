@@ -15,10 +15,11 @@ three segments. A module that only imports `EspalRoute` gives the fixed cost of 
 Run with `lake exe compile-bench` after `lake build`.
 -/
 
-/-- Each table size, with the budget in milliseconds for its median compile time. Size 0 is the
-module that only imports `EspalRoute`. -/
+/-- Each table size, with the budget in milliseconds for its median compile time. Each budget is
+about twice the median on GitHub's `ubuntu-latest` runner. Size 0 is the module that only imports
+`EspalRoute`. -/
 def budgets : List (Nat × Nat) :=
-  [(0, 5000), (10, 5000), (50, 10000), (200, 50000)]
+  [(0, 2000), (10, 2500), (50, 6000), (200, 30000)]
 
 /-- How many times each module is compiled. -/
 def runs : Nat :=

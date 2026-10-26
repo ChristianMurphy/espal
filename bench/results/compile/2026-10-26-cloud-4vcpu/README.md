@@ -4,18 +4,20 @@
 
 ## Setup
 
-The runs used a shared 4-vCPU cloud VM with an Intel Xeon at 2.10 GHz and 15 GB of memory. They used Lean 4.35.0 and the `api` command at commit 5c1a6f9. `raw.txt` has three sets of runs.
+The first runs used a shared 4-vCPU cloud VM with an Intel Xeon at 2.10 GHz and 15 GB of memory. They used Lean 4.35.0 and the `api` command at commit 5c1a6f9. `raw.txt` has three sets of runs.
+
+CI run 95 then ran the benchmark once on GitHub's `ubuntu-latest` runner, at commit 8411e3c with the same `api` command. `raw-github.txt` has its output.
 
 ## Results
 
-| Routes | Median (s) | Range (s) | Beyond the import (s) | CI budget (s) |
-|---|---|---|---|---|
-| 0 | 0.85 | 0.79 to 1.25 | | 5 |
-| 10 | 1.52 | 1.25 to 1.79 | 0.67 | 5 |
-| 50 | 4.23 | 3.78 to 4.56 | 3.38 | 10 |
-| 200 | 22.57 | 21.11 to 24.50 | 21.72 | 50 |
+| Routes | VM median (s) | VM range (s) | Runner median (s) | Runner range (s) | CI budget (s) |
+|---|---|---|---|---|---|
+| 0 | 0.85 | 0.79 to 1.25 | 0.66 | 0.66 to 0.75 | 2 |
+| 10 | 1.52 | 1.25 to 1.79 | 1.04 | 1.02 to 1.06 | 2.5 |
+| 50 | 4.23 | 3.78 to 4.56 | 2.81 | 2.75 to 2.82 | 6 |
+| 200 | 22.57 | 21.11 to 24.50 | 13.92 | 13.81 to 14.07 | 30 |
 
-Each median is the middle of the three set medians, and each range covers all nine runs. Each budget is about twice the median here, so CI fails only on a large regression.
+Each VM median is the middle of the three set medians, and each VM range covers all nine runs. The runner's numbers come from one set of three runs. Each budget is about twice the runner's median, so CI fails when compile time roughly doubles.
 
 ## Where the time goes
 
