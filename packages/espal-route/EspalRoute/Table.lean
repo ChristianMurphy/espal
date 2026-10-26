@@ -374,4 +374,167 @@ theorem matchTable_pathOf {α : Type} {routes : List (Route α)} (h : linksDisjo
       simp only [matchTable, List.findSome?_cons, hr]
       exact ih h.2 ⟨k, hk'⟩ args hl
 
+/-! ## A cheaper check for the kernel
+
+`decide +kernel` on `linksDisjoint` compares every pair of routes, and the kernel takes about a
+millisecond to compare two string literals. `keysDisjoint` reduces each route to numbers once and
+compares those. It recurses through `List.rec`, since the kernel evaluates the `brecOn` that
+structural recursion compiles to about three times more slowly. The compiler supports no
+`List.rec`, so its functions are `noncomputable`. `keysDisjoint_map_routeKey` shows it equals
+`linksDisjoint`. -/
+
+/-- `bs` as the digits of one number in base 257. Each byte `b` is the digit `b + 1`, so the number
+determines the bytes. -/
+def bytesCode : List UInt8 → Nat
+  | [] => 0
+  | b :: bs => bytesCode bs * 257 + b.toNat + 1
+
+/-- A literal segment's bytes as one number, which the kernel compares in one `Nat.beq`. -/
+def strCode (s : String) : Nat :=
+  bytesCode s.toByteArray.data.toList
+
+theorem bytesCode_inj : ∀ {a b : List UInt8}, bytesCode a = bytesCode b → a = b
+  | [], [], _ => rfl
+  | [], _ :: _, h => by simp [bytesCode] at h
+  | _ :: _, [], h => by simp [bytesCode] at h
+  | x :: xs, y :: ys, h => by
+    have hx := x.toNat_lt
+    have hy := y.toNat_lt
+    simp only [bytesCode] at h
+    have hxy : x.toNat = y.toNat := by omega
+    have hc : bytesCode xs = bytesCode ys := by omega
+    rw [UInt8.toNat_inj.mp hxy, bytesCode_inj hc]
+
+theorem strCode_inj {a b : String} (h : strCode a = strCode b) : a = b :=
+  String.toByteArray_inj.mp (ByteArray.ext (Array.toList_inj.mp (bytesCode_inj h)))
+
+theorem strCode_eq_zero {s : String} : strCode s = 0 ↔ s = "" := by
+  constructor
+  · intro h
+    exact strCode_inj (h.trans (by decide))
+  · rintro rfl
+    decide
+
+/-- What the table check needs from a segment. A literal carries its code, whether a `Nat` capture
+accepts it, and whether a link can render it. -/
+inductive SegKey where
+  /-- A literal with its `strCode`, `natAccepts` and whether it isn't `unlinkable`. -/
+  | lit (code : Nat) (nat : Bool) (linkable : Bool)
+  /-- A capture of the given kind. -/
+  | capture (kind : CaptureKind)
+
+/-- The key of a segment. -/
+def segKey : PathSeg → SegKey
+  | .lit s _ => .lit (strCode s) (natAccepts s) (!unlinkable s)
+  | .capture _ kind => .capture kind
+
+/-- `segAccepts` on keys. -/
+def keyAccepts : SegKey → SegKey → Bool
+  | .lit a _ _, .lit b _ _ => a.beq b
+  | .lit _ n _, .capture .nat => n
+  | .lit _ _ l, .capture .string => l
+  | .capture .nat, .lit _ n _ => n
+  | .capture .nat, .capture _ => true
+  | .capture .string, .lit _ _ l => l
+  | .capture .string, .capture _ => true
+
+/-- Whether the key is the empty literal, the one trailing segment `dispatch` accepts. -/
+def SegKey.isEmptyLit : SegKey → Bool
+  | .lit code _ _ => code.beq 0
+  | .capture _ => false
+
+/-- `overlaps` on keys. -/
+noncomputable def keysOverlap (js : List SegKey) : List SegKey → Bool :=
+  js.rec (motive := fun _ => List SegKey → Bool)
+    (fun
+      | [] => true
+      | [i] => i.isEmptyLit
+      | _ => false)
+    fun j _ ih is =>
+    match is with
+    | [] => false
+    | i :: rest => keyAccepts j i && ih rest
+
+theorem keysOverlap_nil_single (i : SegKey) : keysOverlap [] [i] = i.isEmptyLit :=
+  rfl
+
+theorem keysOverlap_cons_cons (j i : SegKey) (js is : List SegKey) :
+    keysOverlap (j :: js) (i :: is) = (keyAccepts j i && keysOverlap js is) :=
+  rfl
+
+theorem keyAccepts_segKey (j i : PathSeg) : keyAccepts (segKey j) (segKey i) = segAccepts j i := by
+  rcases j with ⟨a, _⟩ | ⟨_, _ | _⟩ <;> rcases i with ⟨b, _⟩ | ⟨_, _ | _⟩ <;>
+    simp only [segKey, keyAccepts, segAccepts]
+  apply Bool.eq_iff_iff.mpr
+  simp only [Nat.beq_eq, beq_iff_eq]
+  exact ⟨strCode_inj, congrArg strCode⟩
+
+theorem keysOverlap_map (js is : List PathSeg) :
+    keysOverlap (js.map segKey) (is.map segKey) = overlaps js is := by
+  induction js generalizing is with
+  | nil =>
+    rcases is with _ | ⟨i, _ | ⟨i', rest⟩⟩
+    · rfl
+    · rcases i with ⟨s, _⟩ | ⟨_, _⟩
+      · simp only [List.map_cons, List.map_nil, keysOverlap_nil_single, segKey, SegKey.isEmptyLit,
+          overlaps]
+        apply Bool.eq_iff_iff.mpr
+        simp only [Nat.beq_eq, beq_iff_eq, strCode_eq_zero]
+      · rfl
+    · rcases i with ⟨_, _⟩ | ⟨_, _⟩ <;> rfl
+  | cons j js ih =>
+    rcases is with _ | ⟨i, is⟩
+    · rfl
+    · simp only [List.map_cons, keysOverlap_cons_cons, keyAccepts_segKey, ih, overlaps]
+
+/-- What the table check needs from a route: its method's constructor index and its segments'
+keys. -/
+structure RouteKey where
+  /-- The method's `ctorIdx`. -/
+  method : Nat
+  /-- The keys of the route's segments. -/
+  segs : List SegKey
+
+/-- The key of a route. -/
+def routeKey {α : Type} (r : Route α) : RouteKey :=
+  ⟨r.method.ctorIdx, r.segs.map segKey⟩
+
+/-- `List.all` through `List.rec`. -/
+noncomputable def allKeys (p : RouteKey → Bool) (keys : List RouteKey) : Bool :=
+  keys.rec (motive := fun _ => Bool) true fun k _ ih => p k && ih
+
+/-- `linksDisjoint` on keys. -/
+noncomputable def keysDisjoint (keys : List RouteKey) : Bool :=
+  keys.rec (motive := fun _ => Bool) true fun r rest ih =>
+    allKeys (fun i => !r.method.beq i.method || !keysOverlap r.segs i.segs) rest && ih
+
+theorem keysDisjoint_cons (k : RouteKey) (ks : List RouteKey) :
+    keysDisjoint (k :: ks) =
+      (allKeys (fun i => !k.method.beq i.method || !keysOverlap k.segs i.segs) ks &&
+        keysDisjoint ks) :=
+  rfl
+
+theorem allKeys_map {α : Type} (p : RouteKey → Bool) (f : α → RouteKey) (l : List α) :
+    allKeys p (l.map f) = l.all (fun a => p (f a)) := by
+  induction l with
+  | nil => rfl
+  | cons a l ih =>
+    simp only [List.map_cons, List.all_cons, ← ih]; rfl
+
+theorem not_ctorIdx_beq (a b : Std.Http.Method) : (!a.ctorIdx.beq b.ctorIdx) = decide (a ≠ b) := by
+  rw [Bool.eq_iff_iff]
+  simp only [Bool.not_eq_true', decide_eq_true_eq, ← Bool.not_eq_true, Nat.beq_eq]
+  refine not_congr ⟨fun hi => ?_, congrArg _⟩
+  rw [← Std.Http.Method.ofNat_ctorIdx a, ← Std.Http.Method.ofNat_ctorIdx b, hi]
+
+/-- `keysDisjoint` on a table's keys equals `linksDisjoint`, so `decide +kernel` can check the
+cheaper one. -/
+theorem keysDisjoint_map_routeKey {α : Type} (routes : List (Route α)) :
+    keysDisjoint (routes.map routeKey) = linksDisjoint routes := by
+  induction routes with
+  | nil => rfl
+  | cons r rs ih =>
+    simp only [List.map_cons, keysDisjoint_cons, linksDisjoint, ih, allKeys_map, routeKey,
+      not_ctorIdx_beq, keysOverlap_map]
+
 end Espal.Route

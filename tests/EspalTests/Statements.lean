@@ -59,6 +59,17 @@ info: @Espal.Route.matchTable_pathOf : ∀ {α : Type} {routes : List (Routing.R
 #print axioms Espal.Route.matchTable_pathOf
 
 /--
+info: @Espal.Route.keysDisjoint_map_routeKey : ∀ {α : Type} (routes : List (Routing.Route α)),
+  Espal.Route.keysDisjoint (List.map Espal.Route.routeKey routes) = Espal.Route.linksDisjoint routes
+-/
+#guard_msgs in
+#check @Espal.Route.keysDisjoint_map_routeKey
+
+/-- info: 'Espal.Route.keysDisjoint_map_routeKey' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.Route.keysDisjoint_map_routeKey
+
+/--
 info: Espal.Route.natAccepts_eq : ∀ (s : String), Espal.Route.natAccepts s = (Routing.Internal.parseNat? s).isSome
 -/
 #guard_msgs in
