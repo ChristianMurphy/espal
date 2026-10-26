@@ -405,9 +405,9 @@ CI also runs `lake check`, which builds the project in a bubblewrap sandbox, rep
 
 ### Spikes and a baseline
 
-Here we pick the HTTP layer, the Postgres client and the libraries we keep. We also fix the numbers in the performance targets.
+We finished this milestone. It picked the HTTP layer, the Postgres client and the libraries we keep, and it fixed the numbers in the performance targets. The database failover target moved to the [query layer milestone](#query-layer-models-and-postgres).
 
-- **Toolchain.** Lean 4.35.0 has two server bugs that later releases fix. Each socket read blocks a pool thread, fixed by [lean4#15174](https://github.com/leanprover/lean4/pull/15174). The `Date` header reads the time zone database on every response. In a container without one, the server sends no response at all ([lean4#15442](https://github.com/leanprover/lean4/issues/15442), fixed by #15443 and #15469). Both fixes are in v4.36.0-rc1, released October 14. We spike on 4.35.0 and 4.36.0-rc1 and move to 4.36.0 when it ships.
+- **Toolchain.** Lean 4.35.0 has two server bugs that later releases fix. Each socket read blocks a pool thread, fixed by [lean4#15174](https://github.com/leanprover/lean4/pull/15174). The `Date` header reads the time zone database on every response. In a container without one, the server sends no response at all ([lean4#15442](https://github.com/leanprover/lean4/issues/15442), fixed by #15443 and #15469). Both fixes are in v4.36.0-rc1, released October 14. The spikes ran on 4.35.0 and 4.36.0-rc1. We move to 4.36.0 when it ships ([#1](https://github.com/ChristianMurphy/espal/issues/1)).
 - **HTTP spike (done).** We served `/plaintext` and `/json` on Std.Http, a bare Std.Async loop and Go `net/http`, on Lean 4.35.0 and 4.36.0-rc1. The [results](bench/results/http/2026-10-18-cloud-4vcpu/README.md) come from a shared 4-vCPU cloud VM with shortened runs, so they guide the choice and stay out of published claims.
   - On 4.36.0-rc1, Std.Http served about 4,300 requests per second on two CPUs, 4.6 percent of Go. On 4.35.0 it served about 900.
   - Std.Http spent ten times the CPU per request of the bare loop. The bare loop reached 29 percent of Go, so a server of our own has room to grow but stays well behind Go.
@@ -449,6 +449,7 @@ Here we pick the HTTP layer, the Postgres client and the libraries we keep. We a
 - Statement budgets with upper bounds and `do` notation. The proofs for [injection](#no-sql-injection), [tenant isolation](#tenant-isolation), [statement budgets](#statement-budget) and [row bounds](#row-bounds-and-query-cost) carry over, with batch lookups through `= ANY($1)`.
 - Collections and safe writes from the defaults.
 - The libpq client behind Espal's own client interface, with pipelining, transactions, prepared statements, and single-row mode for streamed results. Its pool waits for a reconnecting connection, where the spike's pool failed requests at once.
+- A figure for the database failover target in the [performance targets](#performance-targets), once the pool waits for a reconnecting connection.
 - Migrations, seed data and fixtures generated from the models, and the [schema check at startup](#the-database-matches-the-declared-schema).
 - [Row-level security](#tenant-isolation) policies for each tenanted table.
 - The [differential tests](#the-query-model-matches-each-database) and [`EXPLAIN` checks](#row-bounds-and-query-cost) in CI.
@@ -519,7 +520,7 @@ None of these block 0.1.
 
 ## Performance targets
 
-These targets come from the earlier proposal, and we fixed their figures after the [spikes](#spikes-and-a-baseline). The database failover row waits for the Postgres client to hold requests while it reconnects.
+These targets come from the earlier proposal, and we fixed their figures after the [spikes](#spikes-and-a-baseline). The database failover row waits for the Postgres client in the [query layer milestone](#query-layer-models-and-postgres).
 
 | Target | Status |
 |---|---|
@@ -624,4 +625,4 @@ These came out of the planning discussion in October 2026.
 
 ## Open decisions
 
-None right now. The library trials settle which dependencies Espal keeps.
+None right now.
