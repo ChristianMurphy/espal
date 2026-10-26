@@ -1,0 +1,9 @@
+name = "espal-jobs"
+version = "0.0.1"
+description = "Espal's job queue, scheduled tasks and mail"
+license = "Apache-2.0"
+defaultTargets = ["EspalJobs"]
+
+[[lean_lib]]
+name = "EspalJobs"
+leanOptions = { autoImplicit = false, linter.missingDocs = true }

@@ -1,7 +1,7 @@
 module
 
-import Espal.Route
-meta import Espal.Route
+import EspalRoute
+meta import EspalRoute
 import Plausible
 import Std.Http.Data.URI
 import Std.Http.Server.Config

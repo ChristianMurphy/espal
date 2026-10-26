@@ -1,0 +1,9 @@
+name = "espal-auth"
+version = "0.0.1"
+description = "Sessions, passwords, OpenID Connect and permissions for Espal"
+license = "Apache-2.0"
+defaultTargets = ["EspalAuth"]
+
+[[lean_lib]]
+name = "EspalAuth"
+leanOptions = { autoImplicit = false, linter.missingDocs = true }

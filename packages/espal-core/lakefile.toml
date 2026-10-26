@@ -1,0 +1,9 @@
+name = "espal-core"
+version = "0.0.1"
+description = "Limits, the route report, problem details and shared types for Espal"
+license = "Apache-2.0"
+defaultTargets = ["EspalCore"]
+
+[[lean_lib]]
+name = "EspalCore"
+leanOptions = { autoImplicit = false, linter.missingDocs = true }

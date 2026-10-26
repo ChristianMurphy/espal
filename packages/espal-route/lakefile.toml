@@ -1,0 +1,9 @@
+name = "espal-route"
+version = "0.0.1"
+description = "Typed routes and links for Espal"
+license = "Apache-2.0"
+defaultTargets = ["EspalRoute"]
+
+[[lean_lib]]
+name = "EspalRoute"
+leanOptions = { autoImplicit = false, linter.missingDocs = true }
