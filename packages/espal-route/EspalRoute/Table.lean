@@ -408,8 +408,8 @@ theorem overlaps_of_covers :
     simp only [Internal.covers, Bool.and_eq_true] at h
     simp only [overlaps, segAccepts_of_segCovers h.1, overlaps_of_covers h.2, Bool.and_self]
 
-/-- A table where `linksDisjoint` holds has no route that lean-routing would reject as shadowed, so
-it can build a `RouteIndex` without checking the table again. -/
+/-- A table where `linksDisjoint` holds has no route that lean-routing would reject as shadowed. It
+can then build a `RouteIndex` without checking the table again. -/
 theorem unshadowed_of_linksDisjoint {α : Type} {routes : List (Route α)}
     (h : linksDisjoint routes = true) : Internal.unshadowed (routes.map Route.key) = true := by
   induction routes with
@@ -431,5 +431,25 @@ theorem unshadowed_of_linksDisjoint {α : Type} {routes : List (Route α)}
       · rw [overlaps_of_covers hc] at hd
         cases hd
     · exact Or.inl hm
+
+/-- `h` with `f` applied to its result, once all its captures are given. -/
+def mapHandler {α β : Type} (f : α → β) :
+    (segs : List PathSeg) → HandlerType segs α → HandlerType segs β
+  | [], h => f h
+  | .lit _ _ :: rest, h => mapHandler f rest h
+  | .capture _ _ :: rest, h => fun a => mapHandler f rest (h a)
+
+/-- `r` with `f` applied to its handler's result. -/
+def mapRoute {α β : Type} (f : α → β) (r : Route α) : Route β :=
+  { method := r.method, segs := r.segs, handler := mapHandler f r.segs r.handler }
+
+/-- `linksDisjoint` reads only methods and patterns, which `mapRoute` keeps. -/
+theorem linksDisjoint_map {α β : Type} (f : α → β) (routes : List (Route α)) :
+    linksDisjoint (routes.map (mapRoute f)) = linksDisjoint routes := by
+  induction routes with
+  | nil => rfl
+  | cons r rs ih =>
+    simp only [List.map_cons, linksDisjoint, ih, List.all_map]
+    rfl
 
 end Espal.Route

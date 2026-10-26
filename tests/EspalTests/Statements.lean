@@ -100,3 +100,14 @@ info: 'Espal.Route.unshadowed_of_linksDisjoint' depends on axioms: [propext, Cla
 /-- info: 'Espal.Api.index' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms Espal.Api.index
+
+/--
+info: @Espal.Route.linksDisjoint_map : ∀ {α β : Type} (f : α → β) (routes : List (Routing.Route α)),
+  Espal.Route.linksDisjoint (List.map (Espal.Route.mapRoute f) routes) = Espal.Route.linksDisjoint routes
+-/
+#guard_msgs in
+#check @Espal.Route.linksDisjoint_map
+
+/-- info: 'Espal.Route.linksDisjoint_map' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.Route.linksDisjoint_map

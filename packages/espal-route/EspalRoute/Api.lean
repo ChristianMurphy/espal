@@ -53,6 +53,12 @@ theorem Api.matchTable_pathOf {α : Type} (t : Api α) (i : Fin t.routes.length)
           applyHandler t.routes[i].segs t.routes[i].handler args) :=
   Espal.Route.matchTable_pathOf t.links_disjoint i args hl
 
+/-- `t` with `f` applied to each handler's result. Mapping keeps each route's method and pattern, so
+`t`'s proof carries over. -/
+def Api.map {α β : Type} (f : α → β) (t : Api α) : Api β where
+  routes := t.routes.map (mapRoute f)
+  links_disjoint := (linksDisjoint_map f t.routes).trans t.links_disjoint
+
 /-- lean-routing's route index over `t`'s routes. `t`'s own proof shows that no route is shadowed,
 so building it checks nothing again. -/
 def Api.index {α : Type} (t : Api α) : RouteIndex α :=

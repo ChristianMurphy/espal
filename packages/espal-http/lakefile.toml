@@ -4,6 +4,23 @@ description = "The Espal server, request limits and admission control"
 license = "Apache-2.0"
 defaultTargets = ["EspalHttp"]
 
+[[require]]
+name = "espal-route"
+path = "../espal-route"
+
+# Required here, ahead of routing-std, so that it resolves from git rather than from routing-std's
+# path to its own checkout.
+[[require]]
+name = "routing"
+git = "https://github.com/paulbutcher/lean-routing"
+rev = "v0.15.1"
+
+[[require]]
+name = "routing-std"
+git = "https://github.com/paulbutcher/lean-routing"
+rev = "v0.15.1"
+subDir = "std"
+
 [[lean_lib]]
 name = "EspalHttp"
 leanOptions = { autoImplicit = false, linter.missingDocs = true }
