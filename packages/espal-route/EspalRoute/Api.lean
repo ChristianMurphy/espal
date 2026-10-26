@@ -261,7 +261,8 @@ elab_rules : command
           throwErrorAt later.ref m!"{earlier.display} accepts links built for the later \
             route {later.display}.\nThose links would reach the wrong handler. Change one of \
             the two paths."
-    -- `def Name`, an `Api` with the routes and the `decide +kernel` proof.
+    -- `def Name`, an `Api` with the routes. The kernel checks `keysDisjoint`, which
+    -- `keysDisjoint_map_routeKey` turns into `linksDisjoint`.
     let routeTerms ← rowsArr.mapM fun r => liftTermElabM do
       let segs : Array Term ← r.segs.toArray.mapM segSyntax
       let caps : Array Ident :=
@@ -274,7 +275,10 @@ elab_rules : command
           Routing.Route _ })
     elabCommand <| ← `(command|
       def $apiId :=
-        ({ routes := [$routeTerms,*], links_disjoint := by decide +kernel } : Espal.Api _))
+        ({ routes := [$routeTerms,*]
+           links_disjoint := by
+            rw [← Espal.Route.keysDisjoint_map_routeKey]
+            decide +kernel } : Espal.Api _))
     -- `pathTo` and its theorem for each handler.
     for hidx : idx in [0:rowsArr.size] do
       let r := rowsArr[idx]
