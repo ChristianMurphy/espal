@@ -45,6 +45,14 @@ api Bench where
 
 #guard (matchTable Bench.routes .post (pathTo updateUser 7)).map (·.2) == some "update 7"
 
+/-! The route index finds the same routes. -/
+
+#guard (Bench.index.matchTable .get (pathTo showPost "hello" 7)).map (·.2) == some "post 7 hello"
+
+#guard (Bench.index.matchTable .get ["users", "new"]).map (·.2) == some "form"
+
+#guard (Bench.index.matchTable .delete ["users", "7"]).isNone
+
 /--
 info: Bench.pathTo_showPost (slug : String) (id : Nat) (h_slug : unlinkable slug = false) :
   matchTable Bench.routes Std.Http.Method.get (pathTo showPost slug id) =

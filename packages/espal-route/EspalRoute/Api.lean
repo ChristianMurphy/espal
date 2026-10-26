@@ -9,6 +9,7 @@ public import EspalCore.Access
 public import EspalRoute.Table
 public meta import EspalRoute.Table
 public meta import Lean.Elab.Command
+public import Routing.Trie
 
 /-!
 # The `api` command
@@ -51,6 +52,11 @@ theorem Api.matchTable_pathOf {α : Type} (t : Api α) (i : Fin t.routes.length)
         (⟨t.routes[i].method, t.routes[i].segs⟩,
           applyHandler t.routes[i].segs t.routes[i].handler args) :=
   Espal.Route.matchTable_pathOf t.links_disjoint i args hl
+
+/-- lean-routing's route index over `t`'s routes. `t`'s own proof shows that no route is shadowed,
+so building it checks nothing again. -/
+def Api.index {α : Type} (t : Api α) : RouteIndex α :=
+  RouteIndex.of t.routes (unshadowed_of_linksDisjoint t.links_disjoint)
 
 /-- The decoded path of a link to `handler`, as a function of the handler's arguments after the
 access value. The `api` command declares an instance for each handler in its table. -/

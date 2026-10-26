@@ -6,6 +6,7 @@ Authors: Christian Murphy
 module
 
 public import Routing.Route
+public import Routing.Shadow
 import Std.Data.String.ToNat
 import all Std.Http.Data.Method
 
@@ -373,5 +374,62 @@ theorem matchTable_pathOf {α : Type} {routes : List (Route α)} (h : linksDisjo
         · rfl
       simp only [matchTable, List.findSome?_cons, hr]
       exact ih h.2 ⟨k, hk'⟩ args hl
+
+/-- lean-routing's digit check, for a literal against a `Nat` capture, agrees with
+`decimalDigits`. -/
+theorem canonicalDigits_eq (cs : List Char) : Internal.canonicalDigits cs = decimalDigits cs := by
+  rcases cs with _ | ⟨c, _ | ⟨d, ds⟩⟩
+  · rfl
+  · simp [Internal.canonicalDigits, decimalDigits]
+  · simp only [Internal.canonicalDigits, decimalDigits, List.all_cons, List.isEmpty_cons,
+      Bool.or_false]
+    cases c != '0' <;> cases c.isDigit <;> simp
+
+/-- A segment that lean-routing's check says covers another accepts a link the other renders. -/
+theorem segAccepts_of_segCovers {a b : PathSeg} (h : Internal.segCovers a b = true) :
+    segAccepts a b = true := by
+  rcases a with ⟨_, _⟩ | ⟨_, ka⟩ <;> rcases b with ⟨_, _⟩ | ⟨_, kb⟩
+  · simpa [Internal.segCovers, segAccepts] using h
+  · simp [Internal.segCovers] at h
+  · cases ka <;> simp_all [Internal.segCovers, segAccepts, natAccepts, canonicalDigits_eq]
+  · cases ka <;> cases kb <;> simp_all [Internal.segCovers, segAccepts]
+
+/-- A pattern that lean-routing's check says covers another overlaps it. -/
+theorem overlaps_of_covers :
+    ∀ {a b : List PathSeg}, Internal.covers a b = true → overlaps a b = true
+  | [], [], _ => rfl
+  | [], [b], h => by
+    rcases b with ⟨s, _⟩ | ⟨_, _⟩
+    · simpa [Internal.covers, Internal.isEmptyLit, overlaps] using h
+    · simp [Internal.covers, Internal.isEmptyLit] at h
+  | [], _ :: _ :: _, h => by simp [Internal.covers] at h
+  | _ :: _, [], h => by simp [Internal.covers] at h
+  | _ :: _, _ :: _, h => by
+    simp only [Internal.covers, Bool.and_eq_true] at h
+    simp only [overlaps, segAccepts_of_segCovers h.1, overlaps_of_covers h.2, Bool.and_self]
+
+/-- A table where `linksDisjoint` holds has no route that lean-routing would reject as shadowed, so
+it can build a `RouteIndex` without checking the table again. -/
+theorem unshadowed_of_linksDisjoint {α : Type} {routes : List (Route α)}
+    (h : linksDisjoint routes = true) : Internal.unshadowed (routes.map Route.key) = true := by
+  induction routes with
+  | nil => rfl
+  | cons r rs ih =>
+    simp only [linksDisjoint, Bool.and_eq_true, List.all_eq_true] at h
+    simp only [List.map_cons, Internal.unshadowed, Bool.and_eq_true, List.all_eq_true, List.mem_map,
+      forall_exists_index, and_imp, forall_apply_eq_imp_iff₂]
+    refine ⟨fun i hi => ?_, ih h.2⟩
+    have hd := h.1 i hi
+    simp only [Route.key, Internal.Taker.shadows, Internal.Taker.blocks, Bool.not_eq_eq_eq_not,
+      Bool.not_true, Bool.and_eq_false_iff, decide_eq_false_iff_not]
+    by_cases hm : r.method = i.method
+    · right
+      simp only [hm, ne_eq, not_true_eq_false, decide_false, Bool.false_or, Bool.not_eq_eq_eq_not,
+        Bool.not_true] at hd
+      cases hc : Internal.covers r.segs i.segs
+      · rfl
+      · rw [overlaps_of_covers hc] at hd
+        cases hd
+    · exact Or.inl hm
 
 end Espal.Route

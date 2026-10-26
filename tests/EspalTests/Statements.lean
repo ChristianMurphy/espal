@@ -83,3 +83,20 @@ info: @Espal.Api.matchTable_pathOf : ∀ {α : Type} (t : Espal.Api α) (i : Fin
 /-- info: 'Espal.Api.matchTable_pathOf' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms Espal.Api.matchTable_pathOf
+
+/--
+info: @Espal.Route.unshadowed_of_linksDisjoint : ∀ {α : Type} {routes : List (Routing.Route α)},
+  Espal.Route.linksDisjoint routes = true → Routing.Internal.unshadowed (List.map Routing.Route.key routes) = true
+-/
+#guard_msgs in
+#check @Espal.Route.unshadowed_of_linksDisjoint
+
+/--
+info: 'Espal.Route.unshadowed_of_linksDisjoint' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms Espal.Route.unshadowed_of_linksDisjoint
+
+/-- info: 'Espal.Api.index' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.Api.index

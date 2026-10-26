@@ -11,7 +11,7 @@ path = "../espal-core"
 [[require]]
 name = "routing"
 git = "https://github.com/paulbutcher/lean-routing"
-rev = "v0.11.0"
+rev = "v0.15.1"
 
 [[lean_lib]]
 name = "EspalRoute"
