@@ -153,7 +153,7 @@ The proof assumes the HTTP layer passes the path through unchanged. Percent-deco
 
 The `api` macro proves that each endpoint's requests reach that endpoint and no earlier one. A shadowed endpoint fails to compile with "endpoint … is unreachable".
 
-Each endpoint's proof steps through every earlier endpoint, so total proof time grows with the square of the endpoint count. Nobody has timed an API with 200 endpoints. Compile-time benchmarks with 10, 50 and 200 generated endpoints run in CI against a budget.
+The table check compares every pair of routes, so its time grows with the square of the route count. On a 4-vCPU machine, a generated table of 200 routes compiles in about 23 s and one of 50 routes in about 4 s. The [compile-time results](bench/results/compile/2026-10-26-cloud-4vcpu/README.md) give medians and ranges. `lake exe compile-bench` times tables of 10, 50 and 200 routes in CI and fails when one exceeds its budget.
 
 ### Client and server agree
 
