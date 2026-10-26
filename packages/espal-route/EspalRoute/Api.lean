@@ -295,15 +295,36 @@ elab_rules : command
               ($(mkIdent (Name.mkSimple s!"h_{n}")) :
                 Routing.unlinkable $(mkIdent (Name.mkSimple n)) = false))
         | .nat => pure none
-      let thmName := mkIdentFrom apiId
-        (apiName ++ Name.mkSimple s!"pathTo_{lastComponent r.handler}")
       let idxLit := Syntax.mkNumLit (toString idx)
-      elabCommand <| ← `(command|
-        theorem $thmName:ident $explicitBinders* $linkableBinders* :
-            Routing.matchTable (Espal.Api.routes $apiId) $(mkCIdent r.method)
-                (Espal.pathTo $handlerIdent $binderTerms*) =
-              some (⟨$(mkCIdent r.method), $segsTerm⟩, $handlerIdent {} $binderTerms*) :=
-          Espal.Api.matchTable_pathOf $apiId ⟨$idxLit, by decide⟩ $argsTerm
-            (show Espal.Route.Linkable $segsTerm $argsTerm by simp [Espal.Route.Linkable, *]))
+      let stmt ← `(Routing.matchTable (Espal.Api.routes $apiId) $(mkCIdent r.method)
+            (Espal.pathTo $handlerIdent $binderTerms*) =
+          some (⟨$(mkCIdent r.method), $segsTerm⟩, $handlerIdent {} $binderTerms*))
+      -- The proof applies `Api.matchTable_pathOf` at index `idx`, and its type matches `stmt`
+      -- only once `routes[idx]` unfolds. The elaborator unfolds it a step at a time, which took
+      -- most of a second at index 199, so the kernel checks the proof instead.
+      let isPublic := (← getScope).isPublic
+      liftTermElabM do
+        let table ← Term.elabTerm apiId none
+        let some α := (← inferType table).app1? ``Espal.Api
+          | throwError "`{apiName}` is not an `Espal.Api`."
+        let some tableName := table.constName?
+          | throwError "`{apiName}` is not a constant."
+        let declName := tableName ++ Name.mkSimple s!"pathTo_{lastComponent r.handler}"
+        Term.elabBinders (explicitBinders ++ linkableBinders) fun xs => do
+          let type ← Term.elabType stmt
+          let segs ← Term.elabTerm segsTerm (← mkAppM ``List #[mkConst ``PathSeg])
+          let args ← Term.elabTermEnsuringType argsTerm (← mkAppM ``Espal.Route.Args #[segs])
+          let hl ← Term.elabTermEnsuringType (← `(by simp [Espal.Route.Linkable, *]))
+            (← mkAppM ``Espal.Route.Linkable #[segs, args])
+          let len ← mkAppM ``List.length #[← mkAppM ``Espal.Api.routes #[table]]
+          let i ← Term.elabTermEnsuringType (← `(⟨$idxLit, by decide +kernel⟩))
+            (← mkAppM ``Fin #[len])
+          Term.synthesizeSyntheticMVarsNoPostponing
+          let proof := mkAppN (mkConst ``Espal.Api.matchTable_pathOf) #[α, table, i, args, hl]
+          let type ← instantiateMVars (← mkForallFVars xs type)
+          let value ← instantiateMVars (← mkLambdaFVars xs proof)
+          withExporting (isExporting := isPublic) <|
+            addDecl (.thmDecl { name := declName, levelParams := [], type, value })
+          addDeclarationRangesFromSyntax declName r.ref
 
 end Espal.ApiCommand
