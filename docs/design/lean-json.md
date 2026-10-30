@@ -18,8 +18,9 @@ Espal reads and writes JSON with [lean-json](https://github.com/paulbutcher/lean
 
 ## What Espal adds
 
-- Two classes and a theorem, below. A deriving handler writes both instances for a structure or an inductive type.
-- Integers of 64 bits or more, such as `Nat`, `Int`, `UInt64` and `Int64`, travel as decimal strings, as [client and server agreement](../../ROADMAP.md#client-and-server-agree) says. Smaller integers travel as numbers. lean-json prints `Nat` and `Int` as numbers and `UInt64` as a string, and it has no instance for `Int64`. Espal needs its own instances or wrapper types for `Nat`, `Int` and `Int64`.
+- The classes and the theorem below. A deriving handler writes the instances for a structure or an inductive type.
+- `espal-json` holds `LawfulJson` and `NotNullJson`, with instances for `Bool`, `String`, `Unit`, `Json`, `Number`, `Array`, `List`, pairs and `Option`. They take the form lean-json would give them, in case lean-json#6 moves them there.
+- Integers of 64 bits or more, such as `Nat`, `Int`, `UInt64` and `Int64`, travel as decimal strings, as [client and server agreement](../../ROADMAP.md#client-and-server-agree) says. Smaller integers travel as numbers. lean-json prints `Nat` and `Int` as numbers. Its decoder refuses a number with more than 1,000 trailing zeros, so neither type round trips for every value. Espal gives them no `LawfulJson` instance, so a derived codec rejects a `Nat` field. `Int32` and `Small`, a natural number below 2^53, travel as numbers. A decimal-string wrapper for larger integers comes later.
 - Streaming decoders with the [chunk-split proof](../../ROADMAP.md#streaming-decoders-agree-with-whole-body-decoders).
 
 ## The round-trip statements
@@ -28,6 +29,12 @@ Espal reads and writes JSON with [lean-json](https://github.com/paulbutcher/lean
 /-- `fromJson?` reads back what `toJson` writes. -/
 class LawfulJson (α : Type u) [ToJson α] [FromJson α] : Prop where
   fromJson?_toJson (x : α) : fromJson? (toJson x) = .ok x
+
+/-- `toJson` never writes `null`, so `Option α` can use `null` for `none`. -/
+class NotNullJson (α : Type u) [ToJson α] : Prop where
+  toJson_ne_null (x : α) : toJson x ≠ .null
+
+instance [ToJson α] [FromJson α] [LawfulJson α] [NotNullJson α] : LawfulJson (Option α)
 
 /-- Every number in `j` is exactly a finite IEEE 754 double. -/
 def DoubleNumbers (j : Json) : Prop :=
@@ -48,6 +55,7 @@ theorem fromJson?_parse_compress [ToJson α] [FromJson α] [LawfulJson α] [Wire
 ```
 
 - `LawfulJson` covers the trip from a value to a tree and back. A handwritten instance can prove this class alone.
+- `Option α` writes `none` as `null`, so `none` and `some none` share an encoding in `Option (Option α)`. `NotNullJson α` rules that out, and the `Option` instance needs it.
 - `WireJson` adds what printing and parsing need. A number has one spelling, and no object repeats a key.
 - `DoubleNumbers` covers JavaScript readers. `JSON.parse` rounds each number to the nearest double, so a number that is already a double reads back unchanged. Lean can't prove a claim about JavaScript, so a Node test checks the values Espal prints.
 - Depth appears once, as the theorem's hypothesis, since no class can bound the depth of every value of a recursive type.
