@@ -142,6 +142,40 @@ set_option pp.explicit true in
 #print axioms Espal.instLawfulDecodeOfLawfulJson
 
 /--
+info: Espal.decimalInt?_toString : ∀ (i : Int) (maxLength : Nat),
+  (toString i).length ≤ maxLength → Espal.decimalInt? (toString i) maxLength = some i
+-/
+#guard_msgs in
+#check @Espal.decimalInt?_toString
+
+/--
+info: @Espal.toString_of_decimalInt? : ∀ {s : String} {maxLength : Nat} {i : Int},
+  Espal.decimalInt? s maxLength = some i → toString i = s
+-/
+#guard_msgs in
+#check @Espal.toString_of_decimalInt?
+
+/--
+info: @Espal.Int64.toJson_of_fromJson? : ∀ {j : Json} {x : Int64}, Json.fromJson? j = Except.ok x → Json.toJson x = j
+-/
+#guard_msgs in
+#check @Espal.Int64.toJson_of_fromJson?
+
+/--
+info: 'Espal.Int64.toJson_of_fromJson?' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms Espal.Int64.toJson_of_fromJson?
+
+/-- info: 'Espal.instLawfulJsonInt64' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.instLawfulJsonInt64
+
+/-- info: 'Espal.instLawfulJsonUInt64' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.instLawfulJsonUInt64
+
+/--
 info: @Json.Number.exponent_ofInt_le : ∀ {i : Int} {k : Nat}, i.natAbs < 10 ^ k → (Json.Number.ofInt i).exponent ≤ ↑k
 -/
 #guard_msgs in
