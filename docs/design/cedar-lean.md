@@ -17,11 +17,11 @@ Espal checks permissions with [cedar-lean](https://github.com/cedar-policy/cedar
 
 ## What has to change upstream
 
-- **Binary size.** A program that only calls `isAuthorized` is 119 MB on Lean 4.35.0, against the 10 MB target. Four Batteries tactic modules, and the `Lean.ToJson` derivations in four files of `Cedar.Spec` and `Cedar.Data`, pull in the Lean package at run time. With both changed, the same program is 4.6 MB on 4.36.0-rc1, where the test ran. [batteries#2034](https://github.com/leanprover-community/batteries/pull/2034) changes the Batteries imports, and [cedar-spec#1056](https://github.com/cedar-policy/cedar-spec/issues/1056) asks about the JSON instances.
-- **Theorems in the module system.** A module can't import `Cedar.Thm.Authorization`, which [cedar-spec#1057](https://github.com/cedar-policy/cedar-spec/issues/1057) asks about. Until it can, Espal proves the guarantees again over `isAuthorized`, as the trial did in 49 lines.
-- **Lean 4.36.** cedar-lean needs the three-line fix in `Cedar/Data/LT.lean`, which [cedar-spec#1058](https://github.com/cedar-policy/cedar-spec/issues/1058) offers.
+- **Binary size.** A program that only calls `isAuthorized` is 119 MB on Lean 4.35.0, against the 10 MB target. Four Batteries tactic modules, and the `Lean.ToJson` derivations in four files of `Cedar.Spec` and `Cedar.Data`, pull in the Lean package at run time. With both changed, the same program is 4.6 MB on 4.36.0-rc1, where the test ran. [cedar-spec#1065](https://github.com/cedar-policy/cedar-spec/pull/1065) moved the JSON derivations into `Cedar.Spec.Json` in October 2026. [batteries#2034](https://github.com/leanprover-community/batteries/pull/2034), which changes the Batteries imports, still waits for a review.
+- **Theorems in the module system.** [cedar-spec#1064](https://github.com/cedar-policy/cedar-spec/pull/1064) made `Cedar.Thm.Authorization` a module in October 2026. Espal can now import and cite its theorems, where the trial proved the guarantees again over `isAuthorized` in 49 lines.
+- **Lean 4.36.** Three proofs in `Cedar/Data/LT.lean` need the new lemma name. [cedar-spec#1058](https://github.com/cedar-policy/cedar-spec/issues/1058) offered the fix, and the Cedar team plans to make it when it moves to the stable 4.36.0 release.
 
-If the size changes don't land, Espal copies `Cedar.Spec` and `Cedar.Data` with the Apache 2.0 notice. The copy leaves out the JSON instances and the Batteries tactics.
+If the Batteries change doesn't land, Espal copies `Cedar.Spec` and `Cedar.Data` with the Apache 2.0 notice. The copy leaves out the Batteries tactics.
 
 ## What Espal adds
 
