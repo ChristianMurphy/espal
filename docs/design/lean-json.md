@@ -18,7 +18,7 @@ Espal reads and writes JSON with [lean-json](https://github.com/paulbutcher/lean
 
 ## What Espal adds
 
-- The classes and the theorem below. `deriving Json` writes the instances for a structure or an inductive type and proves them. Types with parameters and recursive types come next.
+- The classes and the theorem below. `deriving Json` writes the instances for a structure or an inductive type and proves them. A parameter that a field's type mentions takes codec instances, and `NotNullJson` only when a field needs it. A phantom parameter, as in `Key α`, takes none. Recursive types come next.
 - A structure travels as an object with one key per data field. An inductive type whose constructors take no arguments travels as a string, such as `"red"`. Any other inductive type travels as an object whose `kind` key names the constructor, such as `{"kind": "circle", "radius": 2}`. That is the shape of a TypeScript discriminated union and of an OpenAPI `discriminator`.
 - `espal-json` holds `LawfulJson` and `NotNullJson`, with instances for `Bool`, `String`, `Unit`, `Json`, `Number`, `Array`, `List`, pairs and `Option`. They take the form lean-json would give them, in case lean-json#6 moves them there.
 - `JsonDecode` returns every failure with its JSON Pointer, which problem details need. A type with only a `FromJson` instance reports its one failure at its own pointer. Arrays and lists add the index of each element.

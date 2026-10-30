@@ -161,12 +161,6 @@ structure SameKey where
   x? : Option Int32
   deriving Json
 
-/-- error: cannot derive Json for Param: the handler can't yet take a type with parameters -/
-#guard_msgs in
-structure Param (α : Type) where
-  x : α
-  deriving Json
-
 /-- error: cannot derive Json for Tree: the handler can't yet take a type that contains itself -/
 #guard_msgs in
 structure Tree where
