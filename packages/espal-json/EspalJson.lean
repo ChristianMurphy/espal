@@ -5,6 +5,18 @@ Authors: Christian Murphy
 -/
 module
 
+public import EspalJson.Decimal
+public import EspalJson.Decode
+public import EspalJson.Derive
+public import EspalJson.Int32
+public import EspalJson.Int64
+public import EspalJson.Lawful
+public import EspalJson.Number
+public import EspalJson.Object
+public import EspalJson.Recursive
+public import EspalJson.Small
+public import EspalJson.UInt64
+
 /-!
 # espal-json
 
