@@ -111,6 +111,37 @@ info: @Espal.instLawfulJsonOptionOfNotNullJson : ∀ {α : Type u_1} [inst : Jso
 #print axioms Espal.instLawfulJsonSmall
 
 /--
+info: @Espal.decode_toJson : ∀ {α : Type u_1} {inst : Json.ToJson α} {inst_1 : Espal.JsonDecode α}
+  [self : Espal.LawfulDecode α] (pointer : List String) (x : α), Espal.decode pointer (Json.toJson x) = Except.ok x
+-/
+#guard_msgs in
+#check @Espal.LawfulDecode.decode_toJson
+
+/--
+info: Espal.JsonDecode.lawfulJson : ∀ (α : Type u_1) [inst : Json.ToJson α] [inst_1 : Espal.JsonDecode α]
+  [@Espal.LawfulDecode α inst inst_1], @Espal.LawfulJson α inst (@Espal.JsonDecode.toFromJson α inst_1)
+-/
+#guard_msgs in
+set_option pp.explicit true in
+#check @Espal.JsonDecode.lawfulJson
+
+/-- info: 'Espal.JsonDecode.lawfulJson' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.JsonDecode.lawfulJson
+
+/-- info: 'Espal.instLawfulDecodeOptionOfNotNullJson' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Espal.instLawfulDecodeOptionOfNotNullJson
+
+/-- info: 'Espal.instLawfulDecodeArray' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.instLawfulDecodeArray
+
+/-- info: 'Espal.instLawfulDecodeOfLawfulJson' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Espal.instLawfulDecodeOfLawfulJson
+
+/--
 info: @Json.Number.exponent_ofInt_le : ∀ {i : Int} {k : Nat}, i.natAbs < 10 ^ k → (Json.Number.ofInt i).exponent ≤ ↑k
 -/
 #guard_msgs in
