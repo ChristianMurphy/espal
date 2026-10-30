@@ -5,6 +5,11 @@ Authors: Christian Murphy
 -/
 module
 
+public import EspalJson.Int32
+public import EspalJson.Lawful
+public import EspalJson.Number
+public import EspalJson.Small
+
 /-!
 # espal-json
 

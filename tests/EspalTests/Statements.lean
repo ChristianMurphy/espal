@@ -1,5 +1,6 @@
 module
 
+import EspalJson
 import EspalRoute
 
 /-!
@@ -67,3 +68,54 @@ info: Espal.Route.natAccepts_eq : ∀ (s : String), Espal.Route.natAccepts s = (
 /-- info: 'Espal.Route.natAccepts_eq' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms Espal.Route.natAccepts_eq
+
+/--
+info: @Espal.fromJson?_toJson : ∀ {α : Type u_1} {inst : Json.ToJson α} {inst_1 : Json.FromJson α} [self : Espal.LawfulJson α]
+  (x : α), Json.fromJson? (Json.toJson x) = Except.ok x
+-/
+#guard_msgs in
+#check @Espal.LawfulJson.fromJson?_toJson
+
+/--
+info: @Espal.toJson_ne_null : ∀ {α : Type u_1} {inst : Json.ToJson α} [self : Espal.NotNullJson α] (x : α),
+  Json.toJson x ≠ Json.null
+-/
+#guard_msgs in
+#check @Espal.NotNullJson.toJson_ne_null
+
+/--
+info: @Espal.instLawfulJsonOptionOfNotNullJson : ∀ {α : Type u_1} [inst : Json.ToJson α] [inst_1 : Json.FromJson α]
+  [Espal.LawfulJson α] [Espal.NotNullJson α], Espal.LawfulJson (Option α)
+-/
+#guard_msgs in
+#check @Espal.instLawfulJsonOptionOfNotNullJson
+
+/-- info: 'Espal.instLawfulJsonOptionOfNotNullJson' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Espal.instLawfulJsonOptionOfNotNullJson
+
+/-- info: 'Espal.instLawfulJsonArray' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.instLawfulJsonArray
+
+/-- info: 'Espal.instLawfulJsonProd' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.instLawfulJsonProd
+
+/-- info: 'Espal.instLawfulJsonInt32' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.instLawfulJsonInt32
+
+/-- info: 'Espal.instLawfulJsonSmall' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.instLawfulJsonSmall
+
+/--
+info: @Json.Number.exponent_ofInt_le : ∀ {i : Int} {k : Nat}, i.natAbs < 10 ^ k → (Json.Number.ofInt i).exponent ≤ ↑k
+-/
+#guard_msgs in
+#check @Json.Number.exponent_ofInt_le
+
+/-- info: 'Json.Number.exponent_ofInt_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Json.Number.exponent_ofInt_le
