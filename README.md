@@ -54,7 +54,7 @@ Espal aims to be fast enough for production APIs. The fixes in Lean 4.36.0-rc1 l
 
 ## Status
 
-The repository holds the eleven packages from the roadmap. `espal-route` provides the `api` command, whose tables come with a proof that every link reaches its route. It also holds typed routes and a decimal path codec with a proved round trip. `espal-core` holds the `Public` access value, and the other nine packages hold no code yet. A prototype proved statement budgets, tenant scoping, SQL injection safety, HTML escaping and client agreement. Everything else in this README describes plans for 0.1, and [ROADMAP.md](ROADMAP.md) tracks the work.
+The repository holds the eleven packages from the roadmap. `espal-route` provides the `api` command, whose tables come with a proof that every link reaches its route. It also holds typed routes and a decimal path codec with a proved round trip. `espal-json` adds JSON codecs on lean-json. It proves that basic types round trip, and `deriving Json` proves the same for structures and inductive types. `espal-core` holds the `Public` access value, and the other eight packages hold no code yet. A prototype proved statement budgets, tenant scoping, SQL injection safety, HTML escaping and client agreement. Everything else in this README describes plans for 0.1, and [ROADMAP.md](ROADMAP.md) tracks the work.
 
 ## Building
 
