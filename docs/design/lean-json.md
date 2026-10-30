@@ -18,8 +18,9 @@ Espal reads and writes JSON with [lean-json](https://github.com/paulbutcher/lean
 
 ## What Espal adds
 
-- The classes and the theorem below. A deriving handler writes the instances for a structure or an inductive type.
+- The classes and the theorem below. `deriving Json` writes the instances for a structure and proves them. Inductive types, type parameters and recursive types come next.
 - `espal-json` holds `LawfulJson` and `NotNullJson`, with instances for `Bool`, `String`, `Unit`, `Json`, `Number`, `Array`, `List`, pairs and `Option`. They take the form lean-json would give them, in case lean-json#6 moves them there.
+- `JsonDecode` returns every failure with its JSON Pointer, which problem details need. A type with only a `FromJson` instance reports its one failure at its own pointer. Arrays and lists add the index of each element.
 - Integers of 64 bits or more, such as `Nat`, `Int`, `UInt64` and `Int64`, travel as decimal strings, as [client and server agreement](../../ROADMAP.md#client-and-server-agree) says. Smaller integers travel as numbers. lean-json prints `Nat` and `Int` as numbers. Its decoder refuses a number with more than 1,000 trailing zeros, so neither type round trips for every value. Espal gives them no `LawfulJson` instance, so a derived codec rejects a `Nat` field. `Int32` and `Small`, a natural number below 2^53, travel as numbers. A decimal-string wrapper for larger integers comes later.
 - Streaming decoders with the [chunk-split proof](../../ROADMAP.md#streaming-decoders-agree-with-whole-body-decoders).
 
@@ -35,6 +36,19 @@ class NotNullJson (α : Type u) [ToJson α] : Prop where
   toJson_ne_null (x : α) : toJson x ≠ .null
 
 instance [ToJson α] [FromJson α] [LawfulJson α] [NotNullJson α] : LawfulJson (Option α)
+
+/-- One failure while decoding, at a JSON Pointer into the body. -/
+structure DecodeError where
+  pointer : List String
+  detail : String
+
+/-- Decodes a value at `pointer`, returning every failure in it. -/
+class JsonDecode (α : Type u) where
+  decode (pointer : List String) : Json → Except (Array DecodeError) α
+
+/-- `decode` reads back what `toJson` writes, from any position. -/
+class LawfulDecode (α : Type u) [ToJson α] [JsonDecode α] : Prop where
+  decode_toJson (pointer : List String) (x : α) : JsonDecode.decode pointer (toJson x) = .ok x
 
 /-- Every number in `j` is exactly a finite IEEE 754 double. -/
 def DoubleNumbers (j : Json) : Prop :=
@@ -55,6 +69,7 @@ theorem fromJson?_parse_compress [ToJson α] [FromJson α] [LawfulJson α] [Wire
 ```
 
 - `LawfulJson` covers the trip from a value to a tree and back. A handwritten instance can prove this class alone.
+- `LawfulDecode` holds at every pointer, so a derived proof uses its fields' instances wherever they sit. The `FromJson` that `deriving Json` writes reads through `decode`, so `LawfulJson` follows from `LawfulDecode`.
 - `Option α` writes `none` as `null`, so `none` and `some none` share an encoding in `Option (Option α)`. `NotNullJson α` rules that out, and the `Option` instance needs it.
 - `WireJson` adds what printing and parsing need. A number has one spelling, and no object repeats a key.
 - `DoubleNumbers` covers JavaScript readers. `JSON.parse` rounds each number to the nearest double, so a number that is already a double reads back unchanged. Lean can't prove a claim about JavaScript, so a Node test checks the values Espal prints.
