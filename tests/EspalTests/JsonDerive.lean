@@ -161,12 +161,6 @@ structure SameKey where
   x? : Option Int32
   deriving Json
 
-/-- error: cannot derive Json for Tree: the handler can't yet take a type that contains itself -/
-#guard_msgs in
-structure Tree where
-  kids : Array Tree
-  deriving Json
-
 /-! The derived proofs use only the standard axioms. -/
 
 /-- info: 'instLawfulJsonTags' depends on axioms: [propext, Classical.choice, Quot.sound] -/

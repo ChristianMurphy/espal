@@ -5,7 +5,7 @@ Authors: Christian Murphy
 -/
 module
 
-public import EspalJson.Object
+public import EspalJson.Recursive
 public meta import Lean.Elab.Deriving.Basic
 
 /-!
@@ -27,7 +27,11 @@ reports every key the type doesn't have.
 Each data field's type needs a `LawfulDecode` instance, and an optional field's type also needs
 `NotNullJson`. A parameter that a data field's type mentions, such as `α` in `items : Array α`,
 gets the same instances as arguments of the derived instances. It gets `NotNullJson` only if a
-field needs it. The handler can't yet take a type with indices, or one that contains itself.
+field needs it.
+
+A field whose type is the type being derived, or an `Array`, `List` or `Option` of it, makes the
+codec recursive. Its decoder counts down from the depth of the input, as `EspalJson.Recursive`
+describes. The handler can't yet take a type with indices.
 -/
 
 public section
@@ -160,10 +164,55 @@ meta def checkKeys (declName : Name) (reserved : Array String) (data : Array (Na
     if keys.contains key then
       refuse declName m!"two fields use the key {key}"
     keys := keys.push key
-    if (type.find? (·.isConstOf declName)).isSome then
-      refuse declName "the handler can't yet take a type that contains itself"
     if optional && ((← whnfR type).app1? ``Option).isNone then
       refuse declName m!"the optional field {f} needs an Option type, not {type}"
+
+/-- How a data field's type contains the type being derived, if it does. -/
+inductive FieldKind where
+  /-- It doesn't, so the field's own codec reads and writes it. -/
+  | plain
+  /-- The field is a value of the type itself. -/
+  | direct
+  /-- An `Array` of the type. -/
+  | array
+  /-- A `List` of the type. -/
+  | list
+  /-- A required `Option` of the type, with `null` for `none`. -/
+  | option
+  /-- An optional field, named with a trailing `?`, of an `Option` of the type. -/
+  | optional
+
+/-- Whether `kind` reads and writes through the field's own codec. -/
+meta def FieldKind.isPlain : FieldKind → Bool
+  | .plain => true
+  | _ => false
+
+/--
+How the type of the data field `f` contains the type being derived. Refuses a field that
+contains it in any other shape.
+-/
+meta def fieldKind (declName : Name) (params : Array Expr) (f : Name) (type : Expr) :
+    MetaM FieldKind := do
+  if (type.find? (·.isConstOf declName)).isNone then
+    return .plain
+  let info ← getConstInfoInduct declName
+  let self := mkAppN (mkConst declName (info.levelParams.map mkLevelParam)) params
+  let type ← instantiateMVars type
+  if (← fieldKey declName f).2 then
+    if (type.app1? ``Option).any (· == self) then
+      return .optional
+  else
+    if type == self then
+      return .direct
+    if (type.app1? ``Array).any (· == self) then
+      return .array
+    if (type.app1? ``List).any (· == self) then
+      return .list
+    if (type.app1? ``Option).any (· == self) then
+      return .option
+  refuse declName
+      m!"the field {f} has type {type}, which contains {self} in a shape the handler \
+    doesn't cover. It covers {self} itself, and an Array, List or Option of it"
 
 /-- The type a field's value must have a codec for: the `α` of an optional field's `Option α`. -/
 meta def codecType (declName : Name) (field : Name) (type : Expr) : MetaM Expr := do
@@ -218,7 +267,7 @@ meta def planParams (declName : Name) (params : Array Expr) (data : Array (Name 
     withCodecInstances ((used.zip notNull).toList.map fun ((p, _), n) => (p, n))
       (missingInstance declName data)
   let mut notNull := used.map fun _ => true
-  if let some reason← attempt notNull then
+  if let some reason := (← attempt notNull) then
     refuse declName reason
   for j in [0:notNull.size] do
     let trial := notNull.modify j fun _ => false
@@ -319,8 +368,11 @@ meta def defHeaders (ps : Params) :
         Array (TSyntax ``Parser.Term.bracketedBinder)) :=
   return (← ps.binders #[``Json.ToJson] false, ← ps.binders #[``JsonDecode] false)
 
-/-- The instances that every derived codec ends with. -/
-meta def instanceCmds (ps : Params) (T enc dec : Ident) (lawful notNull : Term) :
+/--
+The instances at the end of every derived codec. The term `decode` gives the `JsonDecode`
+instance.
+-/
+meta def instanceCmds (ps : Params) (T enc : Ident) (decode lawful notNull : Term) :
     TermElabM (Array Command) := do
   let ty ← ps.applied T
   let (encB, decB) ← defHeaders ps
@@ -332,7 +384,7 @@ instance $encB:bracketedBinder* : _root_.Json.ToJson $ty :=
       ←
         `(
 instance $decB:bracketedBinder* : Espal.JsonDecode $ty :=
-⟨$dec⟩),
+$decode),
       ←
         `(
 set_option linter.unusedSimpArgs false in
@@ -359,8 +411,12 @@ meta def simpArgs (enc dec : Ident) (proofs : Array Term) :
         ← `(Parser.Tactic.simpLemma| Espal.tagOf)] ++
       (← proofs.mapM fun p => `(Parser.Tactic.simpLemma| ↓ $p:term))
 
-/-- Checks a structure's data fields, and plans which parameters take codecs. -/
-meta def planStructure (declName : Name) (data proofs : Array Name) : MetaM (Array (Nat × Bool)) :=
+/--
+Checks a structure's data fields, plans which parameters take codecs, and says how each data
+field contains the structure, if it does.
+-/
+meta def planStructure (declName : Name) (data proofs : Array Name) :
+    MetaM (Array (Nat × Bool) × Array FieldKind) :=
   withParams declName fun params type =>
     withLocalDeclD `self type fun self => do
       for f in proofs do
@@ -372,13 +428,14 @@ meta def planStructure (declName : Name) (data proofs : Array Name) : MetaM (Arr
               refuse declName m!"the type of {f} depends on another field"
             return (f, type)
       checkKeys declName #[] typed
-      planParams declName params typed
+      let kinds ← typed.mapM fun (f, type) => fieldKind declName params f type
+      let plain := (typed.zip kinds).filterMap fun (t, k) => if k.isPlain then some t else none
+      return (← planParams declName params plain, kinds)
 
 open TSyntax.Compat in
 /-- The commands for a structure's codec, in the order they run. -/
-meta def structureCommands (declName : Name) : TermElabM (Array Command) := do
-  let (data, proofs) ← splitFields declName
-  let ps ← Params.make declName (← planStructure declName data proofs)
+meta def structureCommands (declName : Name) (data proofs : Array Name) (ps : Params) :
+    TermElabM (Array Command) := do
   let T := mkCIdent declName
   let ty ← ps.applied T
   let (encB, decB) ← defHeaders ps
@@ -411,7 +468,7 @@ meta def structureCommands (declName : Name) : TermElabM (Array Command) := do
           _root_.Json → Except (Array Espal.DecodeError) $ty
         | .obj $fields => $body
         | _ => .error #[⟨$pointer, $missing⟩])] ++
-    (← instanceCmds ps T enc dec
+    (← instanceCmds ps T enc (← `(⟨$dec⟩))
         (← `(⟨fun $pointer $self => by
               show $dec $pointer ($enc $self) = .ok $self
               simp [$simpArgs,*]⟩))
@@ -451,7 +508,7 @@ meta def enumCommands (declName : Name) (ctors : List Name) : TermElabM (Array C
           _root_.Json → Except (Array Espal.DecodeError) $ty
         | .str $tag => $chain
         | _ => .error #[⟨$pointer, $wrongType⟩])] ++
-    (← instanceCmds ps T enc dec
+    (← instanceCmds ps T enc (← `(⟨$dec⟩))
         (← `(⟨fun $pointer $x => by
               show $dec $pointer ($enc $x) = .ok $x
               cases $x:ident <;> simp [$enc:ident, $dec:ident]⟩))
@@ -545,12 +602,8 @@ meta def taggedCtor (declName : Name) (ps : Params) (enc dec pointer fields : Id
 
 open TSyntax.Compat in
 /-- The commands for the codec of an inductive type whose values become tagged objects. -/
-meta def taggedCommands (declName : Name) (ctors : List Name) : TermElabM (Array Command) := do
-  let (shapes, plan) ← withParams declName fun params _ => do
-    let shapes ← ctors.toArray.mapM fun c => return (c, ← ctorArgs declName params c)
-    return (shapes.map fun (c, args, _) => (c, args),
-      ← planParams declName params (shapes.flatMap (·.2.2)))
-  let ps ← Params.make declName plan
+meta def taggedCommands (declName : Name) (shapes : Array (Name × Array (Name × Bool)))
+    (ps : Params) : TermElabM (Array Command) := do
   let T := mkCIdent declName
   let ty ← ps.applied T
   let (encB, decB) ← defHeaders ps
@@ -578,9 +631,253 @@ meta def taggedCommands (declName : Name) (ctors : List Name) : TermElabM (Array
           | .ok $tag => $chain
           | .error $failures => .error $failures
         | _ => .error #[⟨$pointer, $missing⟩])] ++
-    (← instanceCmds ps T enc dec
+    (← instanceCmds ps T enc (← `(⟨$dec⟩))
         (← `(⟨fun $pointer $x => match $x:ident with $(pieces.map (·.proofAlt)):matchAlt*⟩))
         (← `(⟨fun $x => by cases $x:ident <;> nofun⟩)))
+
+/-- A structure, or one constructor, as a recursive codec sees it. -/
+structure RecShape where
+  /-- The constructor, or `none` for a structure. -/
+  ctor? : Option Name
+  /-- Each field or argument in the order a pattern lists it, with whether it is a proof. -/
+  args : Array (Name × Bool × FieldKind)
+
+/-- Appends one field's value to the object a recursive encoder builds. -/
+meta def recEncodeStep (enc : Ident) (acc : Term) (key : String) (optional : Bool)
+    (kind : FieldKind) (value : Term) : TermElabM Term :=
+  match kind with
+  | .plain => encodeStep acc key optional value
+  | .direct => `(Espal.pushJson $acc $(quote key) ($enc $value))
+  | .array => `(Espal.pushJson $acc $(quote key) (_root_.Json.arr (($value).map $enc)))
+  | .list => `(Espal.pushJson $acc $(quote key) (_root_.Json.arr (($value).map $enc).toArray))
+  | .option =>
+    `(Espal.pushJson $acc $(quote key)
+        ((($value).attach.map fun i =>
+              have := Espal.sizeOf_lt_of_eq_some i.2;
+              $enc i.1).getD
+          _root_.Json.null))
+  | .optional =>
+    `(Espal.pushOptJson $acc $(quote key)
+        (($value).attach.map fun i =>
+          have := Espal.sizeOf_lt_of_eq_some i.2;
+          $enc i.1))
+
+/-- How a recursive decoder reads one data field, with one less count for the type itself. -/
+meta def recReadField (dec n pointer fields : Ident) (key : String) (optional : Bool)
+    (kind : FieldKind) (type : Term) : TermElabM Term := do
+  let lookup ← `(_root_.Json.findLast? $fields $(quote key))
+  let here ← `($pointer ++ [$(quote key)])
+  let read ←
+    match kind with
+    | .plain =>
+      return ← readField pointer fields key optional type
+    | .direct =>
+      `(Espal.requiredWith ($dec $n) $here $lookup)
+    | .array =>
+      `(Espal.requiredWith (Espal.arrayWith ($dec $n)) $here $lookup)
+    | .list =>
+      `(Espal.requiredWith (Espal.listWith ($dec $n)) $here $lookup)
+    | .option =>
+      `(Espal.requiredWith (Espal.optionWith ($dec $n)) $here $lookup)
+    | .optional =>
+      `(Espal.optionalWith ($dec $n) $here $lookup)
+  `(($read : Except (Array Espal.DecodeError) $type))
+
+/--
+The round-trip fact for one recursive field, from the count one level down, and the simp lemma
+that uses it. `h` bounds the depth of the encoded value that holds the field.
+-/
+meta def recFact (decEnc dec enc encNN n h : Ident) (key : String) (kind : FieldKind) (a : Ident) :
+    TermElabM (Option (TSyntax `tactic × Term)) := do
+  let hv := mkIdent (← mkFreshUserName `hv)
+  let k := quote key
+  match kind with
+  | .plain =>
+    return none
+  | .direct =>
+    return some
+        (←
+            `(tactic|
+                have $hv:ident := fun q =>
+                  $decEnc $n $a q (Espal.depth_lt_of_field (k := $k) $h (by simp))),
+          ← `($hv))
+  | .array =>
+    return some
+        (←
+            `(tactic|
+                have $hv:ident : ∀ x ∈ $a, ∀ q, $dec $n q ($enc x) = .ok x := fun x hx q =>
+                  $decEnc $n x q
+                    (Espal.depth_lt_of_mem_array (Espal.depth_lt_of_field (k := $k) $h (by simp))
+                      hx)),
+          ← `(Espal.arrayWith_map _ _ _ $hv))
+  | .list =>
+    return some
+        (←
+            `(tactic|
+                have $hv:ident : ∀ x ∈ $a, ∀ q, $dec $n q ($enc x) = .ok x := fun x hx q =>
+                  $decEnc $n x q
+                    (Espal.depth_lt_of_mem_list (Espal.depth_lt_of_field (k := $k) $h (by simp))
+                      hx)),
+          ← `(Espal.listWith_map _ _ _ $hv))
+  | .option =>
+    return some
+        (←
+            `(tactic|
+                have $hv:ident : ∀ x, $a = some x → ∀ q, $dec $n q ($enc x) = .ok x := fun x hx q =>
+                  $decEnc $n x q
+                    (Espal.depth_lt_of_eq_some (Espal.depth_lt_of_field (k := $k) $h (by simp))
+                      hx)),
+          ← `(Espal.optionWith_map _ _ _ $hv $encNN))
+  | .optional =>
+    return some
+        (←
+            `(tactic|
+                have $hv:ident : ∀ x, $a = some x → ∀ q, $dec $n q ($enc x) = .ok x := fun x hx q =>
+                  $decEnc $n x q (Espal.depth_lt_of_field (k := $k) $h (by simp [hx]))),
+          ← `(Espal.optionalWith_map _ _ _ $hv $encNN))
+
+/--
+What one shape adds to a recursive codec, as alternatives of the encoder, the decoder and the
+proof.
+-/
+structure RecPieces where
+  /-- How the encoder writes this shape. -/
+  encAlt : TSyntax ``Lean.Parser.Term.matchAlt
+  /-- How the round-trip proof handles this shape. -/
+  proofAlt : TSyntax ``Lean.Parser.Term.matchAlt
+  /-- The tag, if the codec is tagged, and the decoder for an object of this shape. -/
+  decode : String × Term
+
+open TSyntax.Compat in
+/-- What one shape adds to a recursive codec. -/
+meta def recPieces (declName : Name) (ps : Params) (ty : Term)
+    (enc dec decEnc encNN pointer fields n p h : Ident) (tagged : Bool) (shape : RecShape) :
+    TermElabM RecPieces := do
+  let holes ← ps.idents.mapM fun _ => `(_)
+  let paramIdents := ps.idents
+  let build (terms : Array Term) (asPattern : Bool) : TermElabM Term := do
+    match shape.ctor? with
+    | some c =>
+      let C := mkCIdent c
+      if asPattern then `(@$C:ident $holes* $terms*) else `(@$C:ident $paramIdents* $terms*)
+    | none =>
+      let names := shape.args.map fun (name, _) => mkIdent name
+      `({ $[$names:ident := $terms],* })
+  let argType (name : Name) (i : Nat) (vars : Array Ident) : TermElabM Term :=
+    match shape.ctor? with
+    | some c => `(espal_json_arg_type% (@$(mkCIdent c):ident $paramIdents*) $(quote i) $vars*)
+    | none => `(espal_json_field_type% $ty $(mkIdent name) $vars*)
+  let s ← match shape.ctor? with
+    | some c => ctorTag declName c
+    | none => pure ""
+  let idents ← shape.args.mapM fun (name, _) => return mkIdent (← mkFreshUserName name)
+  let decoded ← shape.args.mapM fun (name, _) => return mkIdent (← mkFreshUserName name)
+  let mut encPats : Array Term := #[]
+  let mut obj ←
+    if tagged then `(Espal.pushTag (#[] : Array (String × _root_.Json)) $(quote s))
+    else `((#[] : Array (String × _root_.Json)))
+  let mut keys := if tagged then #["kind"] else #[]
+  let mut reads := #[]
+  let mut vars := #[]
+  let mut proofs : Array (Name × Ident × Nat) := #[]
+  let mut proofIdents : Array Term := #[]
+  let mut facts : Array (TSyntax `tactic) := #[]
+  let mut lemmas : Array Term := #[]
+  for ((name, proof, kind), a, v, i) in
+      shape.args.zip (idents.zip (decoded.zip (Array.range shape.args.size))) do
+    if proof then
+      encPats := encPats.push (← `(_))
+      proofIdents := proofIdents.push a
+      proofs := proofs.push (name, v, i)
+    else
+      let (key, optional) ← fieldKey declName name
+      encPats := encPats.push a
+      obj ← recEncodeStep enc obj key optional kind a
+      keys := keys.push key
+      reads := reads.push (← recReadField dec n pointer fields key optional kind
+        (← argType name i #[]))
+      vars := vars.push v
+      if let some (fact, lemma) := (← recFact decEnc dec enc encNN n h key kind a) then
+        facts := facts.push fact
+        lemmas := lemmas.push lemma
+  let checks ←
+    proofs.mapM fun (name, v, i) => do
+        return (name, v, ← argType name i vars)
+  let pattern ← build (idents.map (·)) true
+  let value ← build (decoded.map (·)) false
+  let simpArgs := (← simpArgs enc dec proofIdents) ++
+    (← lemmas.mapM fun l => `(Parser.Tactic.simpLemma| $l:term))
+  let unfold ← `(tactic| simp only [$enc:ident, Option.attach_map_val] at $h:ident ⊢)
+  let finish ← `(tactic| simp [$simpArgs,*])
+  let tactics := #[unfold] ++ facts ++ #[finish]
+  return {
+    encAlt := ← `(Lean.Parser.Term.matchAltExpr| | $(← build encPats true) => _root_.Json.obj $obj)
+    proofAlt := ← `(Lean.Parser.Term.matchAltExpr|
+      | $n + 1, $pattern, $p, $h => by $[$tactics]*)
+    decode := (s, ← decodeObject pointer fields keys reads vars checks.toList value) }
+
+open TSyntax.Compat in
+/--
+The commands for a recursive codec. The decoder counts down from the depth of its input, and the
+proof is by induction on that count.
+-/
+meta def recursiveCommands (declName : Name) (ps : Params) (tagged : Bool)
+    (shapes : Array RecShape) : TermElabM (Array Command) := do
+  let T := mkCIdent declName
+  let ty ← ps.applied T
+  let (encB, decB) ← defHeaders ps
+  let lawB ← ps.binders #[``Json.ToJson, ``JsonDecode, ``LawfulDecode] true
+  let enc := mkIdent (← mkFreshUserName `encodeJson)
+  let dec := mkIdent (← mkFreshUserName `decodeJson)
+  let decEnc := mkIdent (← mkFreshUserName `decodeJson_encodeJson)
+  let encNN := mkIdent (← mkFreshUserName `encodeJson_ne_null)
+  let pointer := mkIdent (← mkFreshUserName `pointer)
+  let fields := mkIdent (← mkFreshUserName `fields)
+  let tag := mkIdent (← mkFreshUserName `tag)
+  let failures := mkIdent (← mkFreshUserName `failures)
+  let n := mkIdent (← mkFreshUserName `n)
+  let p := mkIdent (← mkFreshUserName `p)
+  let h := mkIdent (← mkFreshUserName `h)
+  let j := mkIdent (← mkFreshUserName `j)
+  let x := mkIdent (← mkFreshUserName `x)
+  let pieces ← shapes.mapM (recPieces declName ps ty enc dec decEnc encNN pointer fields n p h tagged)
+  let body ←
+    if tagged then do
+      let expected := quote s!"expected one of {", ".intercalate (pieces.toList.map (·.decode.1))}"
+      let unknown ← `(Except.error #[⟨$pointer ++ ["kind"], $expected⟩])
+      let chain ←
+        pieces.foldrM (init := unknown) fun piece rest =>
+            `(if $tag == $(quote piece.decode.1) then $(piece.decode.2) else $rest)
+      `(match Espal.tagOf $pointer $fields with
+        | .ok $tag => $chain
+        | .error $failures => .error $failures)
+    else
+      match pieces[0]? with
+      | some piece => pure piece.decode.2
+      | none => refuse declName "a structure has one shape"
+  let missing := quote "expected an object"
+  let deep := quote "nested too deeply"
+  return #[
+    ← `(def $enc $encB:bracketedBinder* : $ty → _root_.Json
+        $(pieces.map (·.encAlt)):matchAlt*),
+    ← `(def $dec $decB:bracketedBinder* :
+          Nat → List String → _root_.Json → Except (Array Espal.DecodeError) $ty
+        | 0, $pointer, _ => .error #[⟨$pointer, $deep⟩]
+        | $n + 1, $pointer, .obj $fields => $body
+        | _ + 1, $pointer, _ => .error #[⟨$pointer, $missing⟩]),
+    ← `(theorem $encNN $encB:bracketedBinder* ($x : $ty) : $enc $x ≠ _root_.Json.null := by
+        unfold $enc:ident
+        split <;> simp),
+    ← `(set_option linter.unusedSimpArgs false in
+        theorem $decEnc $lawB:bracketedBinder* :
+            ∀ (n : Nat) (x : $ty) (p : List String),
+              (_root_.Json.depth ($enc x)) < n → $dec n p ($enc x) = .ok x
+          | 0, _, _, $h => absurd $h (Nat.not_lt_zero _)
+          $(pieces.map (·.proofAlt)):matchAlt*)] ++
+    (← instanceCmds ps T enc
+        (← `(⟨fun $pointer $j => $dec (_root_.Json.depth $j + 1) $pointer $j⟩))
+        (← `(⟨fun $pointer $x => $decEnc _ $x $pointer (Nat.lt_succ_self _)⟩))
+        (← `(⟨$encNN⟩)))
 
 /-- The commands for the derived codec, in the order they run. -/
 meta def mkCommands (declName : Name) : TermElabM (Array Command) := do
@@ -590,13 +887,45 @@ meta def mkCommands (declName : Name) : TermElabM (Array Command) := do
   unless info.all.length == 1 do
     refuse declName "the handler can't yet take mutually inductive types"
   if isStructure (← getEnv) declName then
-    structureCommands declName
+    let (data, proofs) ← splitFields declName
+    let (plan, kinds) ← planStructure declName data proofs
+    let ps ← Params.make declName plan
+    if kinds.all (·.isPlain) then
+      structureCommands declName data proofs ps
+    else
+      let args :=
+        (data.zip kinds).map (fun (f, k) => (f, false, k)) ++
+          proofs.map fun f => (f, true, FieldKind.plain)
+      recursiveCommands declName ps false #[{ ctor? := none, args }]
   else if info.ctors.isEmpty then
     refuse declName "it has no constructors, so no value has an encoding"
   else if ← info.ctors.allM fun c => return (← getConstInfoCtor c).numFields == 0 then
     enumCommands declName info.ctors
   else
-    taggedCommands declName info.ctors
+    let (shapes, plan) ←
+      withParams declName fun params _ => do
+          let shapes ←
+            info.ctors.toArray.mapM fun c => do
+                let (args, data) ← ctorArgs declName params c
+                let kinds ←
+                  data.mapM fun (f, type) => return (f, ← fieldKind declName params f type)
+                return (c, args, data, kinds)
+          let plain :=
+            shapes.flatMap fun (_, _, data, kinds) =>
+              (data.zip kinds).filterMap fun (t, (_, k)) => if k.isPlain then some t else none
+          return (shapes, ← planParams declName params plain)
+    let ps ← Params.make declName plan
+    if shapes.all fun (_, _, _, kinds) => kinds.all (·.2.isPlain) then
+      taggedCommands declName (shapes.map fun (c, args, _, _) => (c, args)) ps
+    else
+      let recShapes :=
+        shapes.map fun (c, args, _, kinds) =>
+          { ctor? := some c
+            args :=
+              args.map fun (name, proof) =>
+                (name, proof, ((kinds.find? (·.1 == name)).map (·.2)).getD .plain) :
+            RecShape }
+      recursiveCommands declName ps true recShapes
 
 /-- Handles `deriving Json` for one type. -/
 meta def jsonHandler (declNames : Array Name) : CommandElabM Bool := do
