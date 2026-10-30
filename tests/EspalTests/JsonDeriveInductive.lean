@@ -101,13 +101,6 @@ inductive Kinded where
 inductive NoCtor where
   deriving Json
 
-/-- error: cannot derive Json for Tree: the handler can't yet take a type that contains itself -/
-#guard_msgs in
-inductive Tree where
-  | leaf
-  | node (kids : Array Tree)
-  deriving Json
-
 /-- error: cannot derive Json for Vec: the handler can't yet take a type with indices -/
 #guard_msgs in
 inductive Vec : Nat → Type where

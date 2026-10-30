@@ -11,6 +11,7 @@ public import EspalJson.Int32
 public import EspalJson.Lawful
 public import EspalJson.Number
 public import EspalJson.Object
+public import EspalJson.Recursive
 public import EspalJson.Small
 
 /-!
