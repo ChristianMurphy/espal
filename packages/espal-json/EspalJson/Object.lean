@@ -17,6 +17,9 @@ optional field is present.
 
 A field named with a trailing `?` is optional. The encoder leaves it out when it is `none`, and
 the decoder reads both a missing key and `null` as `none`. The key drops the `?`.
+
+A constructor with fields becomes a tagged object, whose `kind` key names the constructor, as in
+`{"kind": "circle", "radius": 2}`. Its other keys follow the rules for structure fields.
 -/
 
 @[expose] public section
@@ -37,6 +40,10 @@ def pushOpt {α : Type u} [ToJson α] (fields : Array (String × Json)) (key : S
     Option α → Array (String × Json)
   | none => fields
   | some v => fields.push (key, toJson v)
+
+/-- Appends the field `"kind": tag`, which names the constructor of a tagged object. -/
+def pushTag (fields : Array (String × Json)) (tag : String) : Array (String × Json) :=
+  fields.push ("kind", .str tag)
 
 /-- A required field's value from its lookup, or "missing". -/
 def required {α : Type u} [JsonDecode α] (pointer : List String) :
@@ -59,6 +66,14 @@ def field {α : Type u} [JsonDecode α] (pointer : List String) (fields : Array 
 def optField {α : Type u} [JsonDecode α] (pointer : List String) (fields : Array (String × Json))
     (key : String) : Except (Array DecodeError) (Option α) :=
   optional (pointer ++ [key]) (findLast? fields key)
+
+/-- The constructor name that a tagged object's `kind` key holds. -/
+def tagOf (pointer : List String) (fields : Array (String × Json)) :
+    Except (Array DecodeError) String :=
+  match findLast? fields "kind" with
+  | some (.str tag) => .ok tag
+  | some _ => .error #[⟨pointer ++ ["kind"], "expected a string"⟩]
+  | none => .error #[⟨pointer ++ ["kind"], "missing"⟩]
 
 /-- A failure for each key not in `known`, in the order the object lists them. -/
 def unknownKeys (pointer : List String) (fields : Array (String × Json)) (known : List String) :
@@ -86,6 +101,12 @@ theorem findLast?_pushField {α : Type u} [ToJson α] (fields : Array (String ×
     findLast? (pushField fields key v) k =
       if key == k then some (toJson v) else findLast? fields k :=
   findLast?_push fields key (toJson v) k
+
+@[simp]
+theorem findLast?_pushTag (fields : Array (String × Json)) (tag : String) (k : String) :
+    findLast? (pushTag fields tag) k =
+      if "kind" == k then some (.str tag) else findLast? fields k :=
+  findLast?_push fields "kind" (.str tag) k
 
 @[simp]
 theorem findLast?_pushOpt {α : Type u} [ToJson α] (fields : Array (String × Json)) (key : String)
@@ -122,6 +143,12 @@ theorem unknownKeys_pushField {α : Type u} [ToJson α] (pointer : List String)
     (fields : Array (String × Json)) (known : List String) (k : String) (v : α) (h : k ∈ known) :
     unknownKeys pointer (pushField fields k v) known = unknownKeys pointer fields known :=
   unknownKeys_push pointer fields known k (toJson v) h
+
+@[simp]
+theorem unknownKeys_pushTag (pointer : List String) (fields : Array (String × Json))
+    (known : List String) (tag : String) (h : "kind" ∈ known) :
+    unknownKeys pointer (pushTag fields tag) known = unknownKeys pointer fields known :=
+  unknownKeys_push pointer fields known "kind" (.str tag) h
 
 @[simp]
 theorem unknownKeys_pushOpt {α : Type u} [ToJson α] (pointer : List String)

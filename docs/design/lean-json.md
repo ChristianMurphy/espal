@@ -18,7 +18,8 @@ Espal reads and writes JSON with [lean-json](https://github.com/paulbutcher/lean
 
 ## What Espal adds
 
-- The classes and the theorem below. `deriving Json` writes the instances for a structure and proves them. Inductive types, type parameters and recursive types come next.
+- The classes and the theorem below. `deriving Json` writes the instances for a structure or an inductive type and proves them. Types with parameters and recursive types come next.
+- A structure travels as an object with one key per data field. An inductive type whose constructors take no arguments travels as a string, such as `"red"`. Any other inductive type travels as an object whose `kind` key names the constructor, such as `{"kind": "circle", "radius": 2}`. That is the shape of a TypeScript discriminated union and of an OpenAPI `discriminator`.
 - `espal-json` holds `LawfulJson` and `NotNullJson`, with instances for `Bool`, `String`, `Unit`, `Json`, `Number`, `Array`, `List`, pairs and `Option`. They take the form lean-json would give them, in case lean-json#6 moves them there.
 - `JsonDecode` returns every failure with its JSON Pointer, which problem details need. A type with only a `FromJson` instance reports its one failure at its own pointer. Arrays and lists add the index of each element.
 - Integers of 64 bits or more, such as `Nat`, `Int`, `UInt64` and `Int64`, travel as decimal strings, as [client and server agreement](../../ROADMAP.md#client-and-server-agree) says. Smaller integers travel as numbers. lean-json prints `Nat` and `Int` as numbers. Its decoder refuses a number with more than 1,000 trailing zeros, so neither type round trips for every value. Espal gives them no `LawfulJson` instance, so a derived codec rejects a `Nat` field. `Int32` and `Small`, a natural number below 2^53, travel as numbers. A decimal-string wrapper for larger integers comes later.
