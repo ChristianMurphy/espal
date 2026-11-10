@@ -10,20 +10,26 @@ theorems it declares, and the message for each table it rejects.
 
 open Espal Routing
 
-def plaintext (_ : Public) : String :=
+def plaintext (_ : Public) : Text :=
   "Hello, World!"
 
-def newUser (_ : Public) : String :=
+def newUser (_ : Public) : Text :=
   "form"
 
-def showUser (_ : Public) (id : Nat) : String :=
+def showUser (_ : Public) (id : Nat) : Text :=
   s!"user {id}"
 
-def updateUser (_ : Public) (id : Nat) : String :=
+def updateUser (_ : Public) (id : Nat) : Text :=
   s!"update {id}"
 
-def showPost (_ : Public) (slug : String) (id : Nat) : String :=
+def showPost (_ : Public) (slug : String) (id : Nat) : Text :=
   s!"post {id} {slug}"
+
+/-- The text of an endpoint that answers without a body, which is what these handlers build. -/
+def text (endpoint : Endpoint) : Option String :=
+  match endpoint with
+  | .noBody reply => String.fromUTF8? reply.body
+  | .withBody _ => none
 
 /-! The same path under two methods is fine, and the arguments of `showPost` come in a different
 order from its captures. -/
@@ -39,17 +45,19 @@ api Bench where
 
 #guard pathTo showPost "hello" 7 == ["users", "7", "posts", "hello"]
 
-#guard (matchTable Bench.routes .get (pathTo showPost "hello" 7)).map (·.2) == some "post 7 hello"
+#guard
+  (matchTable Bench.routes .get (pathTo showPost "hello" 7)).bind (text ·.2) == some "post 7 hello"
 
-#guard (matchTable Bench.routes .get ["users", "new"]).map (·.2) == some "form"
+#guard (matchTable Bench.routes .get ["users", "new"]).bind (text ·.2) == some "form"
 
-#guard (matchTable Bench.routes .post (pathTo updateUser 7)).map (·.2) == some "update 7"
+#guard (matchTable Bench.routes .post (pathTo updateUser 7)).bind (text ·.2) == some "update 7"
 
 /-! The route index finds the same routes. -/
 
-#guard (Bench.index.matchTable .get (pathTo showPost "hello" 7)).map (·.2) == some "post 7 hello"
+#guard
+  (Bench.index.matchTable .get (pathTo showPost "hello" 7)).bind (text ·.2) == some "post 7 hello"
 
-#guard (Bench.index.matchTable .get ["users", "new"]).map (·.2) == some "form"
+#guard (Bench.index.matchTable .get ["users", "new"]).bind (text ·.2) == some "form"
 
 #guard (Bench.index.matchTable .delete ["users", "7"]).isNone
 
@@ -61,13 +69,14 @@ info: Bench.pathTo_showPost (slug : String) (id : Nat) (h_slug : unlinkable slug
           segs :=
             [PathSeg.lit "users" ⋯, PathSeg.capture "id" CaptureKind.nat, PathSeg.lit "posts" ⋯,
               PathSeg.capture "slug" CaptureKind.string] },
-        showPost { } slug id)
+        Endpoint.ofValue (showPost { } slug id))
 -/
 #guard_msgs in
 #check Bench.pathTo_showPost
 
 example (id : Nat) :
-    (matchTable Bench.routes .get (pathTo showUser id)).map (·.2) = some (showUser {} id) := by
+    (matchTable Bench.routes .get (pathTo showUser id)).map (·.2) =
+      some (.ofValue (showUser {} id)) := by
   rw [Bench.pathTo_showUser]
   rfl
 
@@ -77,20 +86,20 @@ api Padded where
   GET "/users/:id" => showUser
   GET "/users/042" => newUser
 
-#guard (matchTable Padded.routes .get ["users", "042"]).map (·.2) == some "form"
+#guard (matchTable Padded.routes .get ["users", "042"]).bind (text ·.2) == some "form"
 
 /-! Each table below fails, and the test pins its message. -/
 
-def noAccess : String :=
+def noAccess : Text :=
   "no access"
 
-def wrongAccess (id : Nat) : String :=
+def wrongAccess (id : Nat) : Text :=
   s!"{id}"
 
-def intUser (_ : Public) (id : Int) : String :=
+def intUser (_ : Public) (id : Int) : Text :=
   s!"{id}"
 
-def implicitArg (_ : Public) {n : Nat} : String :=
+def implicitArg (_ : Public) {n : Nat} : Text :=
   s!"{n}"
 
 def count (_ : Public) : Nat :=
@@ -99,7 +108,7 @@ def count (_ : Public) : Nat :=
 def dependent (_ : Public) (n : Nat) : Fin (n + 1) :=
   0
 
-def byName (_ : Public) (name : String) : String :=
+def byName (_ : Public) (name : String) : Text :=
   s!"user {name}"
 
 /--
@@ -171,7 +180,10 @@ api WrongAccess where
 api UnusedCapture where
   GET "/users/:id" => newUser
 
-/-- error: handler `showUser` takes `id`, but path `/users` has no capture `:id`. -/
+/--
+error: handler `showUser` takes `id`, but path `/users` has no capture `:id`, so `id` would be the request body.
+Only a POST, PUT or PATCH row takes a body, and this row is GET.
+-/
 #guard_msgs in
 api MissingCapture where
   GET "/users" => showUser
@@ -187,15 +199,15 @@ api Implicit where
   GET "/a" => implicitArg
 
 /--
-error: handler `count` returns `Nat`, but handler `newUser` returns `String`. Every handler in one `api` table returns the same type.
+error: handler `count` returns `Nat`, which has no `ToReply` instance.
+Return `Text` for plain text, or a type that derives `Json`.
 -/
 #guard_msgs in
-api TwoResults where
-  GET "/a" => newUser
-  GET "/b" => count
+api NoReply where
+  GET "/a" => count
 
 /--
-error: handler `dependent` has a result type that depends on its arguments, so its table has no single result type.
+error: handler `dependent` has a result type that depends on its arguments, so it has no single reply type.
 -/
 #guard_msgs in
 api Dependent where
@@ -218,3 +230,27 @@ Those links would reach the wrong handler. Change one of the two paths.
 api DigitLiteral where
   GET "/users/:id" => showUser
   GET "/users/42" => newUser
+
+/-! A body argument needs a row that takes a body, a `FromBody` instance, and no second argument
+without a capture. -/
+
+def twoBodies (_ : Public) (a : Nat) (b : Nat) : Text :=
+  s!"{a} {b}"
+
+def natBody (_ : Public) (n : Nat) : Text :=
+  s!"{n}"
+
+/--
+error: handler `twoBodies` takes `a` and `b`, and path `/a` has no capture for either. A handler reads at most one argument from the request body.
+-/
+#guard_msgs in
+api TwoBodies where
+  POST "/a" => twoBodies
+
+/--
+error: handler `natBody` takes the request body as `n : Nat`, which has no `FromBody` instance.
+Derive one with `deriving Json`.
+-/
+#guard_msgs in
+api NoFromBody where
+  POST "/a" => natBody

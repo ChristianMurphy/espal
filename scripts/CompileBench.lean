@@ -31,7 +31,7 @@ def source (n : Nat) : String :=
   if n == 0 then header
   else
     let handlers :=
-      (List.range n).map fun i => s!"def h{i} (_ : Public) (id : Nat) : String := toString id\n"
+      (List.range n).map fun i => s!"def h{i} (_ : Public) (id : Nat) : Text := ⟨toString id⟩\n"
     let rows := (List.range n).map fun i => s!"  GET \"/api/items/r{i}/:id\" => h{i}\n"
     header ++ "\n" ++ String.join handlers ++ "\napi Bench where\n" ++ String.join rows
 

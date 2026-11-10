@@ -5,6 +5,10 @@ license = "Apache-2.0"
 defaultTargets = ["EspalJson"]
 
 [[require]]
+name = "espal-core"
+path = "../espal-core"
+
+[[require]]
 name = "json"
 git = "https://github.com/paulbutcher/lean-json"
 rev = "4a0cf599df9a8d9ec804029afa2fe5929f12e6e8"
