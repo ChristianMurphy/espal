@@ -73,7 +73,7 @@ The table gives each route a method, a path and a handler. The handler's signatu
 - Any other binder is the body, decoded from JSON. Only POST, PUT and PATCH take a body, so a GET handler with a body binder fails to compile.
 - The result type gives the response, the statement budget and the errors.
 
-`Db n α ε` counts statements in its type. A `Db a` followed by a `Db b` makes a `Db (a + b)`, and an `if` takes the larger of its two branches. `ε` lists the errors the handler can return, and it defaults to none. Because the count changes from one step to the next, `Db` has no `Monad` instance, so Espal needs its own `do` notation for it. The roadmap's [statement budget](../../ROADMAP.md#statement-budget) section already asks for that, and it is the largest piece of this design that nobody has built yet. `Handler` touches no database, so it is an ordinary monad.
+`Db n α ε` counts statements in its type. A `Db a` followed by a `Db b` makes a `Db (a + b)`, and an `if` takes the larger of its two branches. `ε` lists the errors the handler can return, and it defaults to none. Because the count changes from one step to the next, `Db` has no `Monad` instance, so Espal needs its own `do` notation for it. The roadmap's [statement budget](../../ROADMAP.md#statement-budget) section already asks for that, and it is the largest piece of this design that nobody has built yet. `Handler` touches no database, so it is an ordinary monad. A handler that can fail returns `Fails ε α`, such as `Fails SubmitError Receipt`. The errors come first, since Lean finds a monad by dropping a type's last argument.
 
 The roadmap's defaults allow 10 statements per request. `/queries` can send up to 500 and `/updates` up to 501, so the table raises their limits. The macro checks each handler's count against its route's limit, so the table shows every route that goes past the default.
 
@@ -216,8 +216,11 @@ A `Scope Teacher` holds the school and the teacher, and only sign-in can build o
 ```lean
 inductive SubmitError where
   | notFound
-  | @[status 409] closed (deadline : Instant)
-  deriving Problem
+  | closed (deadline : Instant)
+
+attribute [status 409] SubmitError.closed
+
+deriving instance Problem for SubmitError
 
 def submit (s : Scope Student) (id : Key Assessment) (body : Submission.Create) :
     Db 2 (Created Submission.View) SubmitError := do

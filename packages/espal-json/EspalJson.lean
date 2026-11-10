@@ -8,6 +8,7 @@ module
 public import EspalJson.Decimal
 public import EspalJson.Decode
 public import EspalJson.Derive
+public import EspalJson.DeriveProblem
 public import EspalJson.Int32
 public import EspalJson.Int64
 public import EspalJson.Lawful
