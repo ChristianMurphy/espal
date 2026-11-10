@@ -6,6 +6,7 @@ Authors: Christian Murphy
 module
 
 public import EspalCore.Access
+public import EspalCore.Reply
 public import EspalRoute.Table
 public meta import EspalRoute.Table
 public meta import Lean.Elab.Command
@@ -20,14 +21,16 @@ api Bench where
   GET "/users/:id"  => showUser
 ```
 
-declares `Bench : Api α`, a lean-routing table whose links reach their routes. Each row gives a
-method, a path and a handler. The handler's signature gives the rest. Its first argument is the
-access value. The path capture with the same name fills each later argument, which must be a `Nat`
-or a `String`. Every handler in a table returns the same type `α`.
+declares `Bench : Api Endpoint`, a lean-routing table whose links reach their routes. Each row
+gives a method, a path and a handler. The handler's signature gives the rest. Its first argument is
+the access value. The path capture with the same name fills a later argument, which must be a `Nat`
+or a `String`. At most one argument has no capture of its name, and it is the request body. Its
+type needs a `FromBody` instance, and only a POST, PUT or PATCH row takes one. The result type
+needs a `ToReply` instance, and the command wraps each handler into an `Endpoint`.
 
 For each handler `h`, the command also declares `pathTo h` and a theorem `Bench.pathTo_h`.
 `pathTo h` builds the decoded path of a link to `h` from `h`'s arguments. The theorem shows that
-`matchTable` sends that path to `h` with those arguments. The command fails to compile when a route would
+`matchTable` sends that path to `h`'s endpoint with those arguments. The command fails to compile when a route would
 catch a link built for a later route with the same method.
 -/
 
@@ -134,8 +137,12 @@ private meta structure Row where
   handler : Name
   /-- The segments, with each capture's kind taken from the handler. -/
   segs : List PathSeg
-  /-- The handler's arguments after the access value, in order, with their kinds. -/
+  /-- The handler's arguments that captures fill, in the handler's order, with their kinds. -/
   args : List (Name × CaptureKind)
+  /-- All the handler's arguments after the access value, in order. -/
+  callArgs : List Name
+  /-- The argument that the request body fills, if the handler has one. -/
+  body? : Option Name
 
 /-- The last component of `n`, which names the declarations generated for it. -/
 private meta def lastComponent (n : Name) : String :=
@@ -159,10 +166,26 @@ private meta def resolveSeg (handler : Name) (path : String) (args : List (Name 
         s!"path `{path}` captures `{name}`, but handler \
       `{privateToUserName handler}` has no argument named `{name}`."
 
-/-- Reads the handler's signature: checks the access value and returns each later argument's
-name and kind, and the result type. -/
-private meta def readHandler (handler : Name) (captures : List String) (path : String) :
-    TermElabM (List (Name × CaptureKind) × Expr) := do
+/-- What `readHandler` finds in a handler's signature. -/
+private meta structure Signature where
+  /-- The arguments that captures fill, in order, with their kinds. -/
+  args : List (Name × CaptureKind)
+  /-- All the handler's arguments after the access value, in order. -/
+  callArgs : List Name
+  /-- The argument that the request body fills, if there is one. -/
+  body? : Option Name
+
+/-- Whether `cls type` has an instance. -/
+private meta def hasInstance (cls : Name) (type : Expr) : MetaM Bool := do
+  try
+    return (← trySynthInstance (← mkAppM cls #[type])) matches .some _
+  catch _ =>
+    return false
+
+/-- Reads the handler's signature. It checks the access value and sorts each later argument into a
+capture or the body. It also checks that the body and the result have the instances they need. -/
+private meta def readHandler (handler : Name) (captures : List String) (path methodText : String) :
+    TermElabM Signature := do
   let shown := privateToUserName handler
   let noAccess := m!"handler `{shown}` takes no access value, so nothing says who may call \
     it.\nAdd `(_ : Public)` as its first argument for a public endpoint."
@@ -178,23 +201,40 @@ private meta def readHandler (handler : Name) (captures : List String) (path : S
         throwError m!"handler `{shown}` takes `{decl.userName}` as an implicit argument, which \
           an `api` row has no way to fill."
     let mut args := #[]
+    let mut callArgs := #[]
+    let mut body? : Option (Name × Expr) := none
     for decl in decls[1:] do
       let name := decl.userName.eraseMacroScopes
-      let kind ←
-        if ← withReducible (isDefEq decl.type (mkConst ``Nat)) then pure CaptureKind.nat
-        else if ← withReducible (isDefEq decl.type (mkConst ``String)) then
-          pure CaptureKind.string
-        else
-          throwError m!"handler `{shown}` takes `{name} : {decl.type}`, but a path capture \
-            fills only a `Nat` or `String` argument."
-      unless captures.contains name.toString do
+      callArgs := callArgs.push name
+      if captures.contains name.toString then
+        let kind ←
+          if ← withReducible (isDefEq decl.type (mkConst ``Nat)) then pure CaptureKind.nat
+          else if ← withReducible (isDefEq decl.type (mkConst ``String)) then
+            pure CaptureKind.string
+          else
+            throwError m!"handler `{shown}` takes `{name} : {decl.type}`, but a path capture \
+              fills only a `Nat` or `String` argument."
+        args := args.push (name, kind)
+      else if let some (first, _) := body? then
+        throwError m!"handler `{shown}` takes `{first}` and `{name}`, and path `{path}` has no \
+          capture for either. A handler reads at most one argument from the request body."
+      else
+        body? := some (name, decl.type)
+    if let some (name, type) := body? then
+      unless ["POST", "PUT", "PATCH"].contains methodText do
         throwError m!"handler `{shown}` takes `{name}`, but path `{path}` has no capture \
-          `:{name}`."
-      args := args.push (name, kind)
+          `:{name}`, so `{name}` would be the request body.\nOnly a POST, PUT or PATCH row takes \
+          a body, and this row is {methodText}."
+      unless ← hasInstance ``Espal.FromBody type do
+        throwError m!"handler `{shown}` takes the request body as `{name} : {type}`, which has \
+          no `FromBody` instance.\nDerive one with `deriving Json`."
     if result.hasAnyFVar fun f => xs.contains (.fvar f) then
-      throwError m!"handler `{shown}` has a result type that depends on its arguments, so its \
-        table has no single result type."
-    return (args.toList, result)
+      throwError m!"handler `{shown}` has a result type that depends on its arguments, so it \
+        has no single reply type."
+    unless ← hasInstance ``Espal.ToReply result do
+      throwError m!"handler `{shown}` returns `{result}`, which has no `ToReply` instance.\n\
+        Return `Text` for plain text, or a type that derives `Json`."
+    return { args := args.toList, callArgs := callArgs.toList, body? := body?.map (·.1) }
 
 /-- The syntax of `seg` as a `Routing.PathSeg` literal. -/
 private meta def segSyntax {m : Type → Type} [Monad m] [MonadQuotation m] : PathSeg → m Term
@@ -223,10 +263,22 @@ private meta def argsSyntax {m : Type → Type} [Monad m] [MonadQuotation m] (se
   (captures segs).foldrM (init := ← `(())) fun (name, _) acc =>
       `(($(mkIdent (Name.mkSimple name)), $acc))
 
+/-- The endpoint for the handler of `r`. Its variables take the names of the handler's arguments,
+and a body argument is bound by the function that `Endpoint.ofBody` takes. -/
+private meta def endpointSyntax {m : Type → Type} [Monad m] [MonadQuotation m] (r : Row) : m Term :=
+  do
+  let callArgs : Array Term := r.callArgs.toArray.map fun n => mkIdent n
+  let call ← `($(mkCIdent r.handler) {} $callArgs*)
+  match r.body? with
+  | none =>
+    `(Espal.Endpoint.ofValue $call)
+  | some body =>
+    `(Espal.Endpoint.ofBody fun $(funBinder (mkIdent body)) => $call)
+
 elab_rules : command
   | `(command| api $apiId:ident where $rows*) => do
     let apiName := apiId.getId
-    let mut parsed : Array (Row × Expr) := #[]
+    let mut parsed : Array Row := #[]
     for row in rows do
       let `(apiRoute| $methodId:ident $pathLit:str => $handlerId:ident) := row
         | throwUnsupportedSyntax
@@ -239,26 +291,20 @@ elab_rules : command
         | .ok raw => pure raw
         | .error msg => throwErrorAt pathLit msg
       let handler ← liftCoreM <| realizeGlobalConstNoOverloadWithInfo handlerId
-      if parsed.any (·.1.handler == handler) then
+      if parsed.any (·.handler == handler) then
         throwErrorAt handlerId m!"handler `{privateToUserName handler}` appears twice in \
           `api {apiName}`, so a link to it would be ambiguous."
       let captureNames := raw.filterMap fun | .capture n => some n | .lit _ => none
-      let (args, result) ← withRef handlerId <| liftTermElabM <|
-        readHandler handler captureNames path
-      let segs ← match raw.mapM (resolveSeg handler path args) with
+      let sig ← withRef handlerId <| liftTermElabM <|
+        readHandler handler captureNames path methodText
+      let segs ← match raw.mapM (resolveSeg handler path sig.args) with
         | .ok segs => pure segs
         | .error msg => throwErrorAt pathLit msg
       parsed := parsed.push
-        ({ ref := row, methodText, method, path, handler, segs, args }, result)
-    -- One result type for the whole table.
-    if let some (first, firstResult) := parsed[0]? then
-      for (r, result) in parsed[1:] do
-        unless ← liftTermElabM (isDefEq result firstResult) do
-          throwErrorAt r.ref m!"handler `{privateToUserName r.handler}` returns `{result}`, but \
-            handler `{privateToUserName first.handler}` returns `{firstResult}`. Every handler in \
-            one `api` table returns the same type."
+        { ref := row, methodText, method, path, handler, segs, args := sig.args
+          callArgs := sig.callArgs, body? := sig.body? }
     -- The check `linksDisjoint` makes, run here so the error names both routes.
-    let rowsArr := parsed.map (·.1)
+    let rowsArr := parsed
     for hj : j in [0:rowsArr.size] do
       for hi : i in [j+1:rowsArr.size] do
         let earlier := rowsArr[j]
@@ -273,18 +319,17 @@ elab_rules : command
       let segs : Array Term ← r.segs.toArray.mapM segSyntax
       let caps : Array Ident :=
         (captures r.segs).toArray.map fun (n, _) => mkIdent (Name.mkSimple n)
-      let callArgs : Array Term := r.args.toArray.map fun (n, _) => mkIdent n
-      let body ← `($(mkCIdent r.handler) {} $callArgs*)
+      let body ← endpointSyntax r
       let handlerTerm ← if caps.isEmpty then pure body
         else `(fun $(caps.map funBinder)* => $body)
       `({ method := $(mkCIdent r.method), segs := [$segs,*], handler := $handlerTerm :
-          Routing.Route _ })
+          Routing.Route Espal.Endpoint })
     elabCommand <| ← `(command|
       def $apiId :=
         ({ routes := [$routeTerms,*]
            links_disjoint := by
             rw [← Espal.Route.keysDisjoint_map_routeKey]
-            decide +kernel } : Espal.Api _))
+            decide +kernel } : Espal.Api Espal.Endpoint))
     -- `pathTo` and its theorem for each handler.
     for hidx : idx in [0:rowsArr.size] do
       let r := rowsArr[idx]
@@ -314,7 +359,7 @@ elab_rules : command
       let idxLit := Syntax.mkNumLit (toString idx)
       let stmt ← `(Routing.matchTable (Espal.Api.routes $apiId) $(mkCIdent r.method)
             (Espal.pathTo $handlerIdent $binderTerms*) =
-          some (⟨$(mkCIdent r.method), $segsTerm⟩, $handlerIdent {} $binderTerms*))
+          some (⟨$(mkCIdent r.method), $segsTerm⟩, $(← endpointSyntax r)))
       -- The proof applies `Api.matchTable_pathOf` at index `idx`, and its type matches `stmt`
       -- only once `routes[idx]` unfolds. The elaborator unfolds it a step at a time, which took
       -- most of a second at index 199, so the kernel checks the proof instead.

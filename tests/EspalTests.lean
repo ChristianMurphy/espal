@@ -1,6 +1,7 @@
 module
 
 import EspalTests.Api
+import EspalTests.ApiBody
 import EspalTests.HttpPath
 import EspalTests.Json
 import EspalTests.JsonDecimal
