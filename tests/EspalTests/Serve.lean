@@ -8,7 +8,8 @@ meta import EspalJson
 /-!
 Tests for `Api.toHandler` in `EspalHttp.Serve`. A request reaches the handler its route names, with
 its captures, its query parameters and its body. Any other request gets `404 Not Found`, a body that doesn't decode gets
-its problem, and a body over the limit gets `413`.
+its problem, and a body over the limit gets `413`. A known path under another method gets `405`,
+and a body that doesn't declare JSON gets `415`.
 -/
 
 open Espal Routing Std Async Http
@@ -35,9 +36,10 @@ api Bench where
   POST "/notes" => echo
   GET "/queries" => rows
 
-/-- The status and text body that `Bench.toHandler` answers `request` with, reading at most 64
-bytes of a request body. -/
-def answer (request : Request Body.Stream) : IO (Status × String) :=
+/-- The status, text body and `header` value that `Bench.toHandler` answers `request` with, reading
+at most 64 bytes of a request body. -/
+def answerWith (header : String) (request : Request Body.Stream) :
+    IO (Status × String × Option String) :=
   Async.block <|
     ContextAsync.run do
       let response ← (Bench.toHandler (maxBody := 64)).onRequest request
@@ -47,7 +49,13 @@ def answer (request : Request Body.Stream) : IO (Status × String) :=
           pure ((String.fromUTF8? chunk.data).getD "")
         | none =>
           pure ""
-      return (response.line.status, text)
+      let value := (Header.Name.ofString? header).bind response.line.headers.get?
+      return (response.line.status, text, value.map (·.value))
+
+/-- The status and text body that `Bench.toHandler` answers `request` with. -/
+def answer (request : Request Body.Stream) : IO (Status × String) := do
+  let (status, text, _) ← answerWith "allow" request
+  return (status, text)
 
 /-- The request target `target`, or an error that names it. -/
 def parseTarget (target : String) : IO RequestTarget :=
@@ -61,11 +69,17 @@ def get (target : String) : IO (Status × String) := do
   let body ← Async.block Body.empty
   answer ((Request.get uri).body body)
 
-/-- What a `POST` of `content` to `target` is answered with. -/
-def post (target content : String) : IO (Status × String) := do
+/-- A `POST` of `content` to `target`, declaring `contentType` if there is one. -/
+def postRequest (target content : String) (contentType : Option String) :
+    IO (Request Body.Stream) := do
   let uri ← parseTarget target
   let body ← Async.block (Body.fromBytes content.toUTF8)
-  answer ((Request.post uri).body body)
+  let builder := Request.post uri
+  return ((contentType.bind (builder.header? "content-type")).getD builder).body body
+
+/-- What a `POST` of the JSON `content` to `target` is answered with. -/
+def post (target content : String) : IO (Status × String) := do
+  answer (← postRequest target content (some "application/json"))
 
 /-- Fails with `label` unless `ok`. -/
 def check (label : String) (ok : Bool) : IO Unit :=
@@ -103,3 +117,37 @@ def check (label : String) (ok : Bool) : IO Unit :=
     let (status, text) ← post "/notes" "{\"text\":3}"
     check s!"a body of the wrong type should get 422, got {repr (status, text)}"
         (status == .unprocessableEntity && (text.splitOn "#/text").length == 2)
+
+#eval
+  show IO Unit from do
+    let problem :=
+      "{\"type\":\"/problems/method-not-allowed\",\
+        \"title\":\"The method is not allowed for this path\",\"status\":405}"
+    let uri ← parseTarget "/notes"
+    let body ← Async.block Body.empty
+    let result ← answerWith "allow" ((Request.get uri).body body)
+    check s!"GET /notes should get 405 with Allow: POST, got {repr result}"
+        (result == (.methodNotAllowed, problem, some "POST"))
+    let result ← answerWith "allow" (← postRequest "/users/7" "" none)
+    check s!"POST /users/7 should get 405 with Allow: GET, got {repr result}"
+        (result == (.methodNotAllowed, problem, some "GET"))
+    let result ← answerWith "allow" (← postRequest "/nope" "" none)
+    check s!"POST /nope should get 404 without Allow, got {repr result}"
+        (result == (.notFound, "Not Found", none))
+
+#eval
+  show IO Unit from do
+    let problem :=
+      "{\"type\":\"/problems/unsupported-media-type\",\
+        \"title\":\"The request body has an unsupported media type\",\"status\":415}"
+    for contentType in [none, some "text/plain", some "application/x-www-form-urlencoded"] do
+      let result ← answerWith "accept-post" (← postRequest "/notes" "{\"text\":\"hi\"}" contentType)
+      check s!"a body declared as {repr contentType} should get 415, got {repr result}"
+          (result == (.unsupportedMediaType, problem, some "application/json"))
+    let result ←
+      answer (← postRequest "/notes" "{\"text\":\"hi\"}" (some "application/json; charset=utf-8"))
+    check s!"a JSON body with a charset should get 200, got {repr result}" (result.1 == .ok)
+    let oversized := "{\"text\":\"" ++ String.ofList (List.replicate 80 'a') ++ "\"}"
+    let result ← answer (← postRequest "/notes" oversized (some "text/plain"))
+    check s!"an oversized body of the wrong type should get 415, got {repr result}"
+        (result.1 == .unsupportedMediaType)

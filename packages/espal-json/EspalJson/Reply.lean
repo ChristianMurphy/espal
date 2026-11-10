@@ -25,14 +25,14 @@ open Json
 
 /-- A problem answers its own status as `application/problem+json`. -/
 instance : ToReply Problem :=
-  ⟨fun p => ⟨p.status.toUInt16, "application/problem+json", (compress (toJson p)).toUTF8⟩⟩
+  ⟨fun p => ⟨p.status.toUInt16, "application/problem+json", (compress (toJson p)).toUTF8, []⟩⟩
 
 /-- A value with a JSON encoding answers `200 OK` with it. -/
 instance (priority := low) {α : Type} [ToJson α] : ToReply α :=
-  ⟨fun x => ⟨200, "application/json", (compress (toJson x)).toUTF8⟩⟩
+  ⟨fun x => ⟨200, "application/json", (compress (toJson x)).toUTF8, []⟩⟩
 
-/-- A body with a JSON decoder is read with `decodeBody`. -/
+/-- A body with a JSON decoder must declare `application/json`, and is read with `decodeBody`. -/
 instance {β : Type} [JsonDecode β] : FromBody β :=
-  ⟨fun bytes => (decodeBody β bytes).mapError toReply⟩
+  ⟨"application/json", fun bytes => (decodeBody β bytes).mapError toReply⟩
 
 end Espal

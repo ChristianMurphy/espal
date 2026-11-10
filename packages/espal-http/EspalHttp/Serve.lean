@@ -13,7 +13,9 @@ public import RoutingStd
 
 `Api.toHandler` answers an `Espal.Api`'s routes on `Std.Http.Server`, through lean-routing's route
 index, and `serve` runs it. A route that takes a body gets the request's bytes, up to `maxBody`.
-A longer body gets `413`, and the route's handler doesn't run.
+A longer body gets `413`, and the route's handler doesn't run. A body that doesn't declare the
+route's media type gets `415` before the server reads it. A request whose path matches a route
+under another method gets `405` with an `Allow` header.
 
 Espal's link theorem is stated over lean-routing's `matchTable`. The index finds the same route as
 `matchTable`, by `RouteIndex.matchTable_eq`, which lean-routing proves in its tests.
@@ -32,8 +34,11 @@ def defaultMaxBody : Nat :=
 /-- The response for `reply`. A status code that HTTP doesn't define answers `500`. -/
 def Reply.toResponse (reply : Reply) : ContextAsync (Response Body.Any) :=
   let status := (Status.ofCode none reply.status).getD .internalServerError
-  let builder := Response.withStatus status
-  Engine.stdBytes ((builder.header? "content-type" reply.contentType).getD builder) reply.body
+  let headers := ("content-type", reply.contentType) :: reply.headers
+  let builder :=
+    headers.foldl (init := Response.withStatus status) fun builder (name, value) =>
+      (builder.header? name value).getD builder
+  Engine.stdBytes builder reply.body
 
 /-- The decoded query of `request`. A key or value that isn't valid UTF-8 once decoded is left
 out. -/
@@ -52,18 +57,27 @@ def requestQuery (request : Request Body.Stream) : Query :=
 bytes of it. -/
 def Endpoint.answer (endpoint : Endpoint) (maxBody : Nat) (request : Request Body.Stream) :
     ContextAsync (Response Body.Any) :=
-  match endpoint with
-  | .noBody run => (run (requestQuery request)).toResponse
-  | .withBody run => do
+  let contentType := (request.line.headers.get? .contentType).map (·.value)
+  match endpoint.refusal? contentType, endpoint with
+  | some refusal, _ => refusal.toResponse
+  | none, .noBody run => (run (requestQuery request)).toResponse
+  | none, .withBody _ run => do
     match ← Engine.stdRead request.body maxBody with
     | .ok bytes =>
       (run (requestQuery request) bytes).toResponse
     | .tooLarge =>
       Reply.tooLarge.toResponse
 
-/-- The handler that answers `t`'s routes, and `404 Not Found` for any other request. -/
+/-- The answer to a request that matched no route. A path that answers other methods gets `405`
+with those methods in `Allow`, and any other path gets `404 Not Found`. -/
+def Api.unmatched {α : Type} (t : Api α) : Result .std := fun request =>
+  match t.allowed (decodedPath request.line.uri) with
+  | [] => defaultNotFound request
+  | allow => (Reply.methodNotAllowed (allow.map toString)).toResponse
+
+/-- The handler that answers `t`'s routes, and answers any other request with `Api.unmatched`. -/
 def Api.toHandler (t : Api Endpoint) (maxBody : Nat := defaultMaxBody) : StatelessHandler .std :=
-  (t.map fun endpoint => endpoint.answer maxBody).index.toHandler
+  (t.map fun endpoint => endpoint.answer maxBody).index.toHandler t.unmatched
 
 /-- Serves `t` on `addr` until the server shuts down. -/
 def serve (t : Api Endpoint) (addr : Net.SocketAddress) (config : Http.Config := {})

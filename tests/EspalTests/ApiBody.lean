@@ -42,10 +42,11 @@ api Users where
 
 /-- The status, content type and text that the route for `method` and `path` answers `body`
 with. -/
-def answer (method : Std.Http.Method) (path : List String) (body : String) :
-    Option (UInt16 × String × String) := do
+def answer (method : Std.Http.Method) (path : List String) (body : String)
+    (contentType : Option String := some "application/json") : Option (UInt16 × String × String) :=
+  do
   let (_, endpoint) ← matchTable Users.routes method path
-  let reply := endpoint.reply [] body.toUTF8
+  let reply := endpoint.reply [] contentType body.toUTF8
   return (reply.status, reply.contentType, ← String.fromUTF8? reply.body)
 
 /-! A row without a body answers at once, and a row with one decodes it first. -/
@@ -91,5 +92,35 @@ info: ApiBodyTests.Users.pathTo_renameUser (id : Nat) :
 -/
 #guard_msgs in
 #check Users.pathTo_renameUser
+
+/-! A body must declare the route's media type. The check ignores letter case and parameters, and
+a missing or different type gets `415` with the type in `Accept-Post`. A row without a body
+ignores the header. -/
+
+#guard
+  (answer .post ["users"] "{\"name\":\"Ada\",\"age\":36}"
+          (some "Application/JSON; charset=utf-8")).map
+      (·.1) ==
+    some 200
+
+#guard
+  answer .post ["users"] "{\"name\":\"Ada\",\"age\":36}" none ==
+    some
+      (415, "application/problem+json",
+        "{\"type\":\"/problems/unsupported-media-type\",\
+          \"title\":\"The request body has an unsupported media type\",\"status\":415}")
+
+#guard
+  ["text/plain", "application/x-www-form-urlencoded", "application/jsonx", "application/json+x", "",
+        "json"].all
+    fun type =>
+    (answer .post ["users"] "{\"name\":\"Ada\",\"age\":36}" (some type)).map (·.1) == some 415
+
+#guard
+  ((matchTable Users.routes .post ["users"]).map fun (_, endpoint) =>
+      (endpoint.reply [] (some "text/plain") ByteArray.empty).headers) ==
+    some [("accept-post", "application/json")]
+
+#guard (answer .get ["hello"] "" none).map (·.1) == some 200
 
 end ApiBodyTests

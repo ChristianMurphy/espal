@@ -10,13 +10,17 @@ public import EspalCore.Query
 /-!
 # Replies and endpoints
 
-A `Reply` is a response before it reaches the server: a status, a content type and bytes. An
-`Endpoint` is what a route does once its path matched. It answers from the request's query, and
-some endpoints need the request body as well. The `api` command wraps each handler into an `Endpoint`, so one table
-holds handlers with different result and body types.
+A `Reply` is a response before it reaches the server: a status, a content type, bytes and any
+other headers. An `Endpoint` is what a route does once its path matched. It answers from the
+request's query, and some endpoints need the request body as well. The `api` command wraps each
+handler into an `Endpoint`, so one table holds handlers with different result and body types.
 
 `ToReply` says how a handler's result becomes a reply, and `FromBody` says how a request body
 becomes a handler's argument. `Text` is a string sent as plain text.
+
+`FromBody` also names the media type it reads. A request whose `Content-Type` names another type,
+or none, gets `415`, and the body is never decoded. A browser can't send `application/json` to
+another site without a preflight request, so a form on another site can't post to a JSON route.
 -/
 
 @[expose] public section
@@ -31,14 +35,16 @@ structure Reply where
   contentType : String
   /-- The bytes of the body. -/
   body : ByteArray
+  /-- Any other headers, as names and values. -/
+  headers : List (String × String) := []
   deriving Inhabited
 
 /-- What a route does once its path matched. -/
 inductive Endpoint where
   /-- The route answers from the query, without reading the request body. -/
   | noBody (run : Query → Reply)
-  /-- The route answers from the query and the bytes of the request body. -/
-  | withBody (run : Query → ByteArray → Reply)
+  /-- The route answers from the query and the bytes of a request body of type `mediaType`. -/
+  | withBody (mediaType : String) (run : Query → ByteArray → Reply)
 
 /-- How a handler's result becomes a reply. -/
 class ToReply (α : Type) where
@@ -47,6 +53,8 @@ class ToReply (α : Type) where
 
 /-- How a request body becomes a handler's argument, or the reply that refuses it. -/
 class FromBody (β : Type) where
+  /-- The media type that the body must declare, such as `application/json`, in lower case. -/
+  mediaType : String
   /-- The value in `body`, or the reply for a body that doesn't hold one. -/
   fromBody : ByteArray → Except Reply β
 
@@ -67,12 +75,13 @@ instance : Coe String Text :=
 
 /-- Text answers `200 OK` with a plain-text body. -/
 instance : ToReply Text :=
-  ⟨fun t => ⟨200, "text/plain; charset=utf-8", t.text.toUTF8⟩⟩
+  ⟨fun t => ⟨200, "text/plain; charset=utf-8", t.text.toUTF8, []⟩⟩
 
 /-- The `413` reply for a request body over the server's limit, as an RFC 9457 problem. -/
 def Reply.tooLarge : Reply :=
   ⟨413, "application/problem+json",
-    "{\"type\":\"/problems/body-too-large\",\"title\":\"The request body is too large\",\"status\":413}".toUTF8⟩
+    "{\"type\":\"/problems/body-too-large\",\"title\":\"The request body is too large\",\"status\":413}".toUTF8,
+    []⟩
 
 /-- `s` as a JSON string, with its quotes. -/
 def jsonString (s : String) : String :=
@@ -95,7 +104,29 @@ def Reply.badQuery (parameter detail : String) : Reply :=
         jsonString parameter ++
         ",\"detail\":" ++
         jsonString detail ++
-        "}").toUTF8⟩
+        "}").toUTF8,
+    []⟩
+
+/-- The `405` reply for a path that answers only the methods in `allow`, as an RFC 9457 problem.
+The `Allow` header lists them. -/
+def Reply.methodNotAllowed (allow : List String) : Reply :=
+  ⟨405, "application/problem+json",
+    "{\"type\":\"/problems/method-not-allowed\",\"title\":\"The method is not allowed for this path\",\"status\":405}".toUTF8,
+    [("allow", ", ".intercalate allow)]⟩
+
+/-- The `415` reply for a body that doesn't declare `mediaType`, as an RFC 9457 problem. The
+`Accept-Post` header names the type. -/
+def Reply.unsupportedMedia (mediaType : String) : Reply :=
+  ⟨415, "application/problem+json",
+    "{\"type\":\"/problems/unsupported-media-type\",\"title\":\"The request body has an unsupported media type\",\"status\":415}".toUTF8,
+    [("accept-post", mediaType)]⟩
+
+/-- Whether a `Content-Type` header names `mediaType`. Letter case, parameters such as `charset`
+and spaces around the type make no difference. A missing header names no type. -/
+def declaresMedia (mediaType : String) (contentType : Option String) : Bool :=
+  match contentType with
+  | none => false
+  | some value => ((value.splitOn ";").headD "").trimAscii.toString.toLower == mediaType
 
 /-- Reads the query parameter `name` and answers with `next`'s reply. A parameter that
 `fromQuery` refuses gets the `400` problem, and `next` doesn't run. -/
@@ -118,12 +149,28 @@ def Endpoint.ofValue {ρ : Type} [ToReply ρ] (result : ρ) : Endpoint :=
 /-- The endpoint of a handler that takes a body and no query parameter. A body that `fromBody`
 refuses gets its reply, and the handler doesn't run. -/
 def Endpoint.ofBody {β ρ : Type} [FromBody β] [ToReply ρ] (handler : β → ρ) : Endpoint :=
-  .withBody fun _ bytes => withBytes bytes fun body => toReply (handler body)
+  .withBody (FromBody.mediaType β) fun _ bytes => withBytes bytes fun body => toReply (handler body)
 
-/-- The reply of `endpoint` to a request with the given query and body. -/
-def Endpoint.reply (endpoint : Endpoint) (query : Query) (body : ByteArray) : Reply :=
+/-- The endpoint of a handler that takes query parameters and a body. `run` gets the query and a
+function that decodes the body, so it can check the query first. -/
+def Endpoint.ofQueryBody {β : Type} [FromBody β] (run : Query → ((β → Reply) → Reply) → Reply) :
+    Endpoint :=
+  .withBody (FromBody.mediaType β) fun query bytes => run query (withBytes bytes)
+
+/-- The `415` reply, if `endpoint` takes a body and `contentType` doesn't declare its media
+type. The server checks this before it reads the body. -/
+def Endpoint.refusal? (endpoint : Endpoint) (contentType : Option String) : Option Reply :=
   match endpoint with
-  | .noBody run => run query
-  | .withBody run => run query body
+  | .noBody _ => none
+  | .withBody mediaType _ =>
+    if declaresMedia mediaType contentType then none else some (.unsupportedMedia mediaType)
+
+/-- The reply of `endpoint` to a request with the given query, `Content-Type` header and body. -/
+def Endpoint.reply (endpoint : Endpoint) (query : Query) (contentType : Option String)
+    (body : ByteArray) : Reply :=
+  match endpoint.refusal? contentType, endpoint with
+  | some refusal, _ => refusal
+  | none, .noBody run => run query
+  | none, .withBody _ run => run query body
 
 end Espal
