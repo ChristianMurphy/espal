@@ -35,16 +35,29 @@ def Reply.toResponse (reply : Reply) : ContextAsync (Response Body.Any) :=
   let builder := Response.withStatus status
   Engine.stdBytes ((builder.header? "content-type" reply.contentType).getD builder) reply.body
 
+/-- The decoded query of `request`. A key or value that isn't valid UTF-8 once decoded is left
+out. -/
+def requestQuery (request : Request Body.Stream) : Query :=
+  request.line.uri.query.toArray.toList.filterMap fun (key, value) => do
+    let key ← key.decode
+    let value ←
+      match value with
+      | some value =>
+        value.decode
+      | none =>
+        some ""
+    return (key, value)
+
 /-- The response of `endpoint` to `request`. A route that takes a body reads at most `maxBody`
 bytes of it. -/
 def Endpoint.answer (endpoint : Endpoint) (maxBody : Nat) (request : Request Body.Stream) :
     ContextAsync (Response Body.Any) :=
   match endpoint with
-  | .noBody reply => reply.toResponse
+  | .noBody run => (run (requestQuery request)).toResponse
   | .withBody run => do
     match ← Engine.stdRead request.body maxBody with
     | .ok bytes =>
-      (run bytes).toResponse
+      (run (requestQuery request) bytes).toResponse
     | .tooLarge =>
       Reply.tooLarge.toResponse
 

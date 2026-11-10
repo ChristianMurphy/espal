@@ -7,7 +7,7 @@ meta import EspalJson
 
 /-!
 Tests for `Api.toHandler` in `EspalHttp.Serve`. A request reaches the handler its route names, with
-its captures and its body. Any other request gets `404 Not Found`, a body that doesn't decode gets
+its captures, its query parameters and its body. Any other request gets `404 Not Found`, a body that doesn't decode gets
 its problem, and a body over the limit gets `413`.
 -/
 
@@ -26,10 +26,14 @@ def showUser (_ : Public) (id : Nat) : Text :=
 def echo (_ : Public) (note : Note) : Note :=
   note
 
+def rows (_ : Public) (queries : Clamp 1 500) (label : Option String) : Text :=
+  s!"{queries.val} rows {label}"
+
 api Bench where
   GET "/plaintext" => plaintext
   GET "/users/:id" => showUser
   POST "/notes" => echo
+  GET "/queries" => rows
 
 /-- The status and text body that `Bench.toHandler` answers `request` with, reading at most 64
 bytes of a request body. -/
@@ -72,7 +76,10 @@ def check (label : String) (ok : Bool) : IO Unit :=
   show IO Unit from do
     for (target, status, text) in
       [("/plaintext", Status.ok, "Hello, World!"), ("/users/7", .ok, "user 7"),
-        ("/users/new", .notFound, "Not Found"), ("/nope", .notFound, "Not Found")] do
+        ("/users/new", .notFound, "Not Found"), ("/nope", .notFound, "Not Found"),
+        ("/queries?queries=20", .ok, "20 rows none"), ("/queries", .ok, "1 rows none"),
+        ("/queries?queries=900&label=a%20b", .ok, "500 rows (some (a b))"),
+        ("/queries?label", .ok, "1 rows (some )")] do
       let result ← get target
       check s!"{target} should get {repr (status, text)}, got {repr result}"
           (result == (status, text))

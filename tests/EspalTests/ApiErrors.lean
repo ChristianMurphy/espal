@@ -58,10 +58,7 @@ api Work where
 def answer (method : Std.Http.Method) (path : List String) (body : String := "") :
     Option (UInt16 × String) := do
   let (_, endpoint) ← matchTable Work.routes method path
-  let reply :=
-    match endpoint with
-    | .noBody reply => reply
-    | .withBody run => run body.toUTF8
+  let reply := endpoint.reply [] body.toUTF8
   return (reply.status, ← String.fromUTF8? reply.body)
 
 /-! A handler that can't fail, and one that succeeds, answer with the value. -/

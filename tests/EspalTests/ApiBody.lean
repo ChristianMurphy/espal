@@ -45,10 +45,7 @@ with. -/
 def answer (method : Std.Http.Method) (path : List String) (body : String) :
     Option (UInt16 × String × String) := do
   let (_, endpoint) ← matchTable Users.routes method path
-  let reply :=
-    match endpoint with
-    | .noBody reply => reply
-    | .withBody run => run body.toUTF8
+  let reply := endpoint.reply [] body.toUTF8
   return (reply.status, reply.contentType, ← String.fromUTF8? reply.body)
 
 /-! A row without a body answers at once, and a row with one decodes it first. -/
