@@ -25,8 +25,9 @@ api Bench where
 declares `Bench : Api Endpoint`, a lean-routing table whose links reach their routes. Each row
 gives a method, a path and a handler. The handler's signature gives the rest. Its first argument is
 the access value. The path capture with the same name fills a later argument, which must be a `Nat`
-or a `String`. At most one argument has no capture of its name, and it is the request body. Its
-type needs a `FromBody` instance, and only a POST, PUT or PATCH row takes one. The result type
+or a `String`. An argument with no capture of its name reads the query parameter of that name
+when its type has a `FromQuery` instance. At most one other argument is left, and it is the request
+body. Its type needs a `FromBody` instance, and only a POST, PUT or PATCH row takes one. The result type
 needs a `ToReply` instance, and the command wraps each handler into an `Endpoint`.
 
 For each handler `h`, the command also declares `pathTo h` and a theorem `Bench.pathTo_h`.
@@ -142,6 +143,8 @@ private meta structure Row where
   args : List (Name × CaptureKind)
   /-- All the handler's arguments after the access value, in order. -/
   callArgs : List Name
+  /-- The arguments that query parameters fill, in order. -/
+  queries : List Name
   /-- The argument that the request body fills, if the handler has one. -/
   body? : Option Name
 
@@ -173,6 +176,8 @@ private meta structure Signature where
   args : List (Name × CaptureKind)
   /-- All the handler's arguments after the access value, in order. -/
   callArgs : List Name
+  /-- The arguments that query parameters fill, in order. -/
+  queries : List Name
   /-- The argument that the request body fills, if there is one. -/
   body? : Option Name
 
@@ -203,6 +208,7 @@ private meta def readHandler (handler : Name) (captures : List String) (path met
           an `api` row has no way to fill."
     let mut args := #[]
     let mut callArgs := #[]
+    let mut queries := #[]
     let mut body? : Option (Name × Expr) := none
     for decl in decls[1:] do
       let name := decl.userName.eraseMacroScopes
@@ -216,6 +222,8 @@ private meta def readHandler (handler : Name) (captures : List String) (path met
             throwError m!"handler `{shown}` takes `{name} : {decl.type}`, but a path capture \
               fills only a `Nat` or `String` argument."
         args := args.push (name, kind)
+      else if ← hasInstance ``Espal.FromQuery decl.type then
+        queries := queries.push name
       else if let some (first, _) := body? then
         throwError m!"handler `{shown}` takes `{first}` and `{name}`, and path `{path}` has no \
           capture for either. A handler reads at most one argument from the request body."
@@ -235,7 +243,10 @@ private meta def readHandler (handler : Name) (captures : List String) (path met
     unless ← hasInstance ``Espal.ToReply result do
       throwError m!"handler `{shown}` returns `{result}`, which has no `ToReply` instance.\n\
         Return `Text` for plain text, or a type that derives `Json`."
-    return { args := args.toList, callArgs := callArgs.toList, body? := body?.map (·.1) }
+    let sig : Signature :=
+      { args := args.toList, callArgs := callArgs.toList, queries := queries.toList
+        body? := body?.map (·.1) }
+    return sig
 
 /-- The syntax of `seg` as a `Routing.PathSeg` literal. -/
 private meta def segSyntax {m : Type → Type} [Monad m] [MonadQuotation m] : PathSeg → m Term
@@ -270,11 +281,25 @@ private meta def endpointSyntax {m : Type → Type} [Monad m] [MonadQuotation m]
   do
   let callArgs : Array Term := r.callArgs.toArray.map fun n => mkIdent n
   let call ← `($(mkCIdent r.handler) {} $callArgs*)
-  match r.body? with
-  | none =>
-    `(Espal.Endpoint.ofValue $call)
-  | some body =>
-    `(Espal.Endpoint.ofBody fun $(funBinder (mkIdent body)) => $call)
+  if r.queries.isEmpty then
+    match r.body? with
+    | none =>
+      `(Espal.Endpoint.ofValue $call)
+    | some body =>
+      `(Espal.Endpoint.ofBody fun $(funBinder (mkIdent body)) => $call)
+  else
+    let query ← `(query)
+    let bytes ← `(bytes)
+    let mut reply ← `(Espal.toReply $call)
+    if let some body := r.body? then
+      reply ← `(Espal.withBytes $bytes fun $(funBinder (mkIdent body)) => $reply)
+    for q in r.queries.reverse do
+      reply ← `(Espal.withQuery $query $(quote q.toString) fun $(funBinder (mkIdent q)) => $reply)
+    match r.body? with
+    | none =>
+      `(Espal.Endpoint.noBody fun $query => $reply)
+    | some _ =>
+      `(Espal.Endpoint.withBody fun $query $bytes => $reply)
 
 elab_rules : command
   | `(command| api $apiId:ident where $rows*) => do
@@ -303,7 +328,7 @@ elab_rules : command
         | .error msg => throwErrorAt pathLit msg
       parsed := parsed.push
         { ref := row, methodText, method, path, handler, segs, args := sig.args
-          callArgs := sig.callArgs, body? := sig.body? }
+          callArgs := sig.callArgs, queries := sig.queries, body? := sig.body? }
     -- The check `linksDisjoint` makes, run here so the error names both routes.
     let rowsArr := parsed
     for hj : j in [0:rowsArr.size] do

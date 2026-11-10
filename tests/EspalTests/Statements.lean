@@ -254,3 +254,13 @@ info: @Json.Number.exponent_ofInt_le : ∀ {i : Int} {k : Nat}, i.natAbs < 10 ^ 
 /-- info: 'Json.Number.exponent_ofInt_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms Json.Number.exponent_ofInt_le
+
+/--
+info: Espal.Clamp.fromQuery_ok (lo hi : Nat) (h : lo ≤ hi) (s : Option String) : ∃ c, Espal.fromQuery s = Except.ok c
+-/
+#guard_msgs in
+#check Espal.Clamp.fromQuery_ok
+
+/-- info: 'Espal.Clamp.fromQuery_ok' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.Clamp.fromQuery_ok

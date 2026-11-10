@@ -7,6 +7,7 @@ module
 
 public import EspalCore.Access
 public import EspalCore.Handler
+public import EspalCore.Query
 public import EspalCore.Reply
 
 /-!

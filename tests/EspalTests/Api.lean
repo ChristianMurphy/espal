@@ -28,7 +28,7 @@ def showPost (_ : Public) (slug : String) (id : Nat) : Text :=
 /-- The text of an endpoint that answers without a body, which is what these handlers build. -/
 def text (endpoint : Endpoint) : Option String :=
   match endpoint with
-  | .noBody reply => String.fromUTF8? reply.body
+  | .noBody run => String.fromUTF8? (run []).body
   | .withBody _ => none
 
 /-! The same path under two methods is fine, and the arguments of `showPost` come in a different
@@ -180,13 +180,20 @@ api WrongAccess where
 api UnusedCapture where
   GET "/users/:id" => newUser
 
+/-- A type with no query, body or reply instance. -/
+structure Blob where
+  n : Nat
+
+def blobUser (_ : Public) (blob : Blob) : Text :=
+  s!"{blob.n}"
+
 /--
-error: handler `showUser` takes `id`, but path `/users` has no capture `:id`, so `id` would be the request body.
+error: handler `blobUser` takes `blob`, but path `/users` has no capture `:blob`, so `blob` would be the request body.
 Only a POST, PUT or PATCH row takes a body, and this row is GET.
 -/
 #guard_msgs in
 api MissingCapture where
-  GET "/users" => showUser
+  GET "/users" => blobUser
 
 /-- error: handler `intUser` takes `id : Int`, but a path capture fills only a `Nat` or `String` argument. -/
 #guard_msgs in
@@ -234,11 +241,11 @@ api DigitLiteral where
 /-! A body argument needs a row that takes a body, a `FromBody` instance, and no second argument
 without a capture. -/
 
-def twoBodies (_ : Public) (a : Nat) (b : Nat) : Text :=
-  s!"{a} {b}"
+def twoBodies (_ : Public) (a : Blob) (b : Blob) : Text :=
+  s!"{a.n} {b.n}"
 
-def natBody (_ : Public) (n : Nat) : Text :=
-  s!"{n}"
+def blobBody (_ : Public) (blob : Blob) : Text :=
+  s!"{blob.n}"
 
 /--
 error: handler `twoBodies` takes `a` and `b`, and path `/a` has no capture for either. A handler reads at most one argument from the request body.
@@ -248,9 +255,9 @@ api TwoBodies where
   POST "/a" => twoBodies
 
 /--
-error: handler `natBody` takes the request body as `n : Nat`, which has no `FromBody` instance.
+error: handler `blobBody` takes the request body as `blob : Blob`, which has no `FromBody` instance.
 Derive one with `deriving Json`.
 -/
 #guard_msgs in
 api NoFromBody where
-  POST "/a" => natBody
+  POST "/a" => blobBody
