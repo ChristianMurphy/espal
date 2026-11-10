@@ -60,6 +60,17 @@ info: @Espal.Route.matchTable_pathOf : ∀ {α : Type} {routes : List (Routing.R
 #print axioms Espal.Route.matchTable_pathOf
 
 /--
+info: @Espal.Route.keysDisjoint_map_routeKey : ∀ {α : Type} (routes : List (Routing.Route α)),
+  Espal.Route.keysDisjoint (List.map Espal.Route.routeKey routes) = Espal.Route.linksDisjoint routes
+-/
+#guard_msgs in
+#check @Espal.Route.keysDisjoint_map_routeKey
+
+/-- info: 'Espal.Route.keysDisjoint_map_routeKey' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.Route.keysDisjoint_map_routeKey
+
+/--
 info: Espal.Route.natAccepts_eq : ∀ (s : String), Espal.Route.natAccepts s = (Routing.Internal.parseNat? s).isSome
 -/
 #guard_msgs in
@@ -68,6 +79,50 @@ info: Espal.Route.natAccepts_eq : ∀ (s : String), Espal.Route.natAccepts s = (
 /-- info: 'Espal.Route.natAccepts_eq' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms Espal.Route.natAccepts_eq
+
+/--
+info: @Espal.Api.matchTable_pathOf : ∀ {α : Type} (t : Espal.Api α) (i : Fin t.routes.length)
+  (args : Espal.Route.Args t.routes[i].segs),
+  Espal.Route.Linkable t.routes[i].segs args →
+    Routing.matchTable t.routes t.routes[i].method (Espal.Route.pathOf t.routes[i].segs args) =
+      some
+        ({ method := t.routes[i].method, segs := t.routes[i].segs },
+          Espal.Route.applyHandler t.routes[i].segs t.routes[i].handler args)
+-/
+#guard_msgs in
+#check @Espal.Api.matchTable_pathOf
+
+/-- info: 'Espal.Api.matchTable_pathOf' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.Api.matchTable_pathOf
+
+/--
+info: @Espal.Route.unshadowed_of_linksDisjoint : ∀ {α : Type} {routes : List (Routing.Route α)},
+  Espal.Route.linksDisjoint routes = true → Routing.Internal.unshadowed (List.map Routing.Route.key routes) = true
+-/
+#guard_msgs in
+#check @Espal.Route.unshadowed_of_linksDisjoint
+
+/--
+info: 'Espal.Route.unshadowed_of_linksDisjoint' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms Espal.Route.unshadowed_of_linksDisjoint
+
+/-- info: 'Espal.Api.index' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.Api.index
+
+/--
+info: @Espal.Route.linksDisjoint_map : ∀ {α β : Type} (f : α → β) (routes : List (Routing.Route α)),
+  Espal.Route.linksDisjoint (List.map (Espal.Route.mapRoute f) routes) = Espal.Route.linksDisjoint routes
+-/
+#guard_msgs in
+#check @Espal.Route.linksDisjoint_map
+
+/-- info: 'Espal.Route.linksDisjoint_map' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.Route.linksDisjoint_map
 
 /--
 info: @Espal.fromJson?_toJson : ∀ {α : Type u_1} {inst : Json.ToJson α} {inst_1 : Json.FromJson α} [self : Espal.LawfulJson α]
@@ -174,6 +229,21 @@ info: 'Espal.Int64.toJson_of_fromJson?' depends on axioms: [propext, Classical.c
 /-- info: 'Espal.instLawfulJsonUInt64' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms Espal.instLawfulJsonUInt64
+
+/--
+info: @Espal.status_of_decodeBody_error : ∀ {α : Type} [inst : Espal.JsonDecode α] {body : ByteArray} {p : Espal.Problem},
+  Espal.decodeBody α body = Except.error p →
+    p.status = 400 ∧ (Json.parseBytes body).toOption = none ∨
+      p.status = 422 ∧ ∃ j, Json.parseBytes body = Except.ok j ∧ Espal.decode [] j = Except.error p.errors
+-/
+#guard_msgs in
+#check @Espal.status_of_decodeBody_error
+
+/--
+info: 'Espal.status_of_decodeBody_error' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms Espal.status_of_decodeBody_error
 
 /--
 info: @Json.Number.exponent_ofInt_le : ∀ {i : Int} {k : Nat}, i.natAbs < 10 ^ k → (Json.Number.ofInt i).exponent ≤ ↑k

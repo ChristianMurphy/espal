@@ -69,3 +69,8 @@ srcDir = "scripts"
 name = "tests"
 root = "TestDriver"
 srcDir = "scripts"
+
+[[lean_exe]]
+name = "compile-bench"
+root = "CompileBench"
+srcDir = "scripts"

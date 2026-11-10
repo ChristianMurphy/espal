@@ -5,6 +5,8 @@ Authors: Christian Murphy
 -/
 module
 
+public import EspalHttp.Serve
+
 /-!
 # espal-http
 

@@ -36,6 +36,11 @@ jobs:
           lint: "true"
           leanchecker: "true"
 
+      # Compiles generated `api` tables of 10, 50 and 200 routes, and fails when one takes longer
+      # than its budget in `scripts/CompileBench.lean`.
+      - name: Time the api command on generated tables
+        run: lake exe compile-bench
+
       # Ubuntu 24.04 blocks the unprivileged user namespaces that bubblewrap needs.
       - name: Install bubblewrap for lake check
         run: |

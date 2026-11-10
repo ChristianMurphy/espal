@@ -1,0 +1,6 @@
+# CI run 95 on GitHub's ubuntu-latest runner, commit 8411e3c
+# https://github.com/ChristianMurphy/espal/actions/runs/40284146157
+| 0 | 0.66 | 0.66–0.75 | 5.00 |
+| 10 | 1.04 | 1.02–1.06 | 5.00 |
+| 50 | 2.81 | 2.75–2.82 | 10.00 |
+| 200 | 13.92 | 13.81–14.07 | 50.00 |

@@ -5,6 +5,9 @@ Authors: Christian Murphy
 -/
 module
 
+public import EspalCore.Access
+public import EspalCore.Reply
+
 /-!
 # espal-core
 

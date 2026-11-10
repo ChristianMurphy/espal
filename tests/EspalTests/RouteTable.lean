@@ -56,6 +56,12 @@ example : overlaps [] [.lit "" (by decide)] = true := by decide +kernel
 
 example : overlaps [.lit "" (by decide)] [] = false := by decide +kernel
 
+/-- `strCode` tells apart literals whose bytes differ only past the first byte of a character. -/
+example : keysOverlap [segKey (.lit "é" (by decide))] [segKey (.lit "è" (by decide))] = false := by
+  decide +kernel
+
+example : keysOverlap [] [segKey (.lit "" (by decide))] = true := by decide +kernel
+
 def users : List (Route String) :=
   [{ method := .get, segs := [.lit "users" (by decide), .lit "new" (by decide)],
      handler := "form" },
@@ -65,6 +71,11 @@ def users : List (Route String) :=
       handler := fun n => s!"update {n}" }]
 
 theorem users_disjoint : linksDisjoint users = true := by decide +kernel
+
+/-! The kernel evaluates `keysDisjoint`, which the `api` command checks in place of
+`linksDisjoint`. -/
+
+example : keysDisjoint (users.map routeKey) = true := by decide +kernel
 
 /-- The link for user `n` reaches the second route, with `n`. -/
 example (n : Nat) :
@@ -83,6 +94,8 @@ def byName : List (Route String) :=
       handler := fun s => s!"user {s}" }]
 
 example : linksDisjoint byName = false := by decide +kernel
+
+example : keysDisjoint (byName.map routeKey) = false := by decide +kernel
 
 #guard (matchTable byName .get ["users", "new"]).map (·.2) == some "form"
 
