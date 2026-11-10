@@ -231,6 +231,21 @@ info: 'Espal.Int64.toJson_of_fromJson?' depends on axioms: [propext, Classical.c
 #print axioms Espal.instLawfulJsonUInt64
 
 /--
+info: @Espal.status_of_decodeBody_error : ∀ {α : Type} [inst : Espal.JsonDecode α] {body : ByteArray} {p : Espal.Problem},
+  Espal.decodeBody α body = Except.error p →
+    p.status = 400 ∧ (Json.parseBytes body).toOption = none ∨
+      p.status = 422 ∧ ∃ j, Json.parseBytes body = Except.ok j ∧ Espal.decode [] j = Except.error p.errors
+-/
+#guard_msgs in
+#check @Espal.status_of_decodeBody_error
+
+/--
+info: 'Espal.status_of_decodeBody_error' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms Espal.status_of_decodeBody_error
+
+/--
 info: @Json.Number.exponent_ofInt_le : ∀ {i : Int} {k : Nat}, i.natAbs < 10 ^ k → (Json.Number.ofInt i).exponent ≤ ↑k
 -/
 #guard_msgs in
