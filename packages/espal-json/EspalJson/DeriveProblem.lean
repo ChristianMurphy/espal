@@ -35,7 +35,8 @@ def problemReply (status : UInt16) (type title : String) (members : Array (Strin
         (.obj
           (#[("type", .str type), ("title", .str title),
               ("status", .num (Number.ofNat status.toNat))] ++
-            members))).toUTF8⟩
+            members))).toUTF8,
+    []⟩
 
 /-- `attribute [status n] E.c` sets the HTTP status that `deriving instance Problem for E` answers
 the constructor `E.c` with. -/

@@ -69,6 +69,25 @@ so building it checks nothing again. -/
 def Api.index {α : Type} (t : Api α) : RouteIndex α :=
   RouteIndex.of t.routes (unshadowed_of_linksDisjoint t.links_disjoint)
 
+/-- The methods that `path` answers in `t`. A request for `path` with any other method gets `405`
+when this list has a method, and `404` when it has none. -/
+def Api.allowed {α : Type} (t : Api α) (path : List String) : List Std.Http.Method :=
+  (t.routes.map (·.method)).eraseDups.filter fun m => (matchTable t.routes m path).isSome
+
+/-- `allowed` lists exactly the methods whose route matches the path. -/
+theorem Api.mem_allowed_iff {α : Type} (t : Api α) (path : List String) (m : Std.Http.Method) :
+    m ∈ t.allowed path ↔ (matchTable t.routes m path).isSome := by
+  simp only [Api.allowed, List.mem_filter, and_iff_right_iff_imp]
+  intro h
+  obtain ⟨x, hx⟩ := Option.isSome_iff_exists.1 h
+  obtain ⟨r, hr, hm⟩ := List.exists_of_findSome?_eq_some hx
+  have hbeq : (r.method == m) = true := by
+    simp only [Route.tryMatch, Route.tryDispatch] at hm
+    split at hm <;> simp_all
+  have : ReflBEq Std.Http.Method := ⟨method_beq_self _⟩
+  have : LawfulBEq Std.Http.Method := ⟨method_eq_of_beq⟩
+  exact List.mem_eraseDups.2 (List.mem_map.2 ⟨r, hr, eq_of_beq hbeq⟩)
+
 /-- The decoded path of a link to `handler`, as a function of the handler's arguments after the
 access value. The `api` command declares an instance for each handler in its table. -/
 class PathTo {τ : Type} (handler : τ) (Path : outParam Type) where
@@ -289,17 +308,17 @@ private meta def endpointSyntax {m : Type → Type} [Monad m] [MonadQuotation m]
       `(Espal.Endpoint.ofBody fun $(funBinder (mkIdent body)) => $call)
   else
     let query ← `(query)
-    let bytes ← `(bytes)
+    let decode ← `(decode)
     let mut reply ← `(Espal.toReply $call)
     if let some body := r.body? then
-      reply ← `(Espal.withBytes $bytes fun $(funBinder (mkIdent body)) => $reply)
+      reply ← `($decode fun $(funBinder (mkIdent body)) => $reply)
     for q in r.queries.reverse do
       reply ← `(Espal.withQuery $query $(quote q.toString) fun $(funBinder (mkIdent q)) => $reply)
     match r.body? with
     | none =>
       `(Espal.Endpoint.noBody fun $query => $reply)
     | some _ =>
-      `(Espal.Endpoint.withBody fun $query $bytes => $reply)
+      `(Espal.Endpoint.ofQueryBody fun $query $decode => $reply)
 
 elab_rules : command
   | `(command| api $apiId:ident where $rows*) => do

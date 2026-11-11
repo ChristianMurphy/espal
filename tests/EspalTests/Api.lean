@@ -29,7 +29,7 @@ def showPost (_ : Public) (slug : String) (id : Nat) : Text :=
 def text (endpoint : Endpoint) : Option String :=
   match endpoint with
   | .noBody run => String.fromUTF8? (run []).body
-  | .withBody _ => none
+  | .withBody _ _ => none
 
 /-! The same path under two methods is fine, and the arguments of `showPost` come in a different
 order from its captures. -/

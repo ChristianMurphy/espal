@@ -264,3 +264,14 @@ info: Espal.Clamp.fromQuery_ok (lo hi : Nat) (h : lo ≤ hi) (s : Option String)
 /-- info: 'Espal.Clamp.fromQuery_ok' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms Espal.Clamp.fromQuery_ok
+
+/--
+info: Espal.Api.mem_allowed_iff {α : Type} (t : Espal.Api α) (path : List String) (m : Std.Http.Method) :
+  m ∈ t.allowed path ↔ (Routing.matchTable t.routes m path).isSome = true
+-/
+#guard_msgs in
+#check Espal.Api.mem_allowed_iff
+
+/-- info: 'Espal.Api.mem_allowed_iff' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.Api.mem_allowed_iff

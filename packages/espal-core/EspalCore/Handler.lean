@@ -50,6 +50,6 @@ structure NotFound where
 instance : ToReply NotFound :=
   ⟨fun _ =>
     ⟨404, "application/problem+json",
-      "{\"type\":\"/problems/not-found\",\"title\":\"Not found\",\"status\":404}".toUTF8⟩⟩
+      "{\"type\":\"/problems/not-found\",\"title\":\"Not found\",\"status\":404}".toUTF8, []⟩⟩
 
 end Espal

@@ -40,7 +40,7 @@ api Site where
 def answer (method : Std.Http.Method) (path : List String) (query : Query) (body : String := "") :
     Option (UInt16 × String) := do
   let (_, endpoint) ← matchTable Site.routes method path
-  let reply := endpoint.reply query body.toUTF8
+  let reply := endpoint.reply query (some "application/json") body.toUTF8
   return (reply.status, ← String.fromUTF8? reply.body)
 
 /-! A clamped parameter reads a missing or malformed value as its lower bound, and moves any
