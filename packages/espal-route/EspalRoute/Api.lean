@@ -34,6 +34,11 @@ For each handler `h`, the command also declares `pathTo h` and a theorem `Bench.
 `pathTo h` builds the decoded path of a link to `h` from `h`'s arguments. The theorem shows that
 `matchTable` sends that path to `h`'s endpoint with those arguments. The command fails to compile when a route would
 catch a link built for a later route with the same method.
+
+The command also declares `linkTo h` and a theorem `Bench.linkTo_h`. `linkTo h` takes `h`'s
+captures and query arguments and builds a `Link`, which holds the path and the query parameters.
+The theorem shows that following the link gives the reply of `h` for those arguments. A handler
+gets no `linkTo` when one of its query arguments has no `LawfulQuery` instance.
 -/
 
 @[expose] public section
@@ -98,6 +103,18 @@ class PathTo {τ : Type} (handler : τ) (Path : outParam Type) where
 access value. -/
 def pathTo {τ : Type} (handler : τ) {Path : Type} [PathTo handler Path] : Path :=
   PathTo.pathTo handler
+
+/-- A link to `handler`, as a function of the handler's arguments after the access value, without
+its body. The `api` command declares an instance for each handler whose query arguments have
+`LawfulQuery` instances. -/
+class LinkTo {τ : Type} (handler : τ) (Fn : outParam Type) where
+  /-- The link, as a function of the handler's arguments. -/
+  linkTo : Fn
+
+/-- A link to `handler`, as a function of the handler's arguments after the access value, without
+its body. Captures fill the path, and query arguments fill the query. -/
+def linkTo {τ : Type} (handler : τ) {Fn : Type} [LinkTo handler Fn] : Fn :=
+  LinkTo.linkTo handler
 
 end Espal
 
@@ -164,6 +181,8 @@ private meta structure Row where
   callArgs : List Name
   /-- The arguments that query parameters fill, in order. -/
   queries : List Name
+  /-- The types of the query arguments, in order, if each has a `LawfulQuery` instance. -/
+  queryTypes? : Option (List Term)
   /-- The argument that the request body fills, if the handler has one. -/
   body? : Option Name
 
@@ -197,6 +216,8 @@ private meta structure Signature where
   callArgs : List Name
   /-- The arguments that query parameters fill, in order. -/
   queries : List Name
+  /-- The types of the query arguments, in order, if each has a `LawfulQuery` instance. -/
+  queryTypes? : Option (List Term)
   /-- The argument that the request body fills, if there is one. -/
   body? : Option Name
 
@@ -204,6 +225,14 @@ private meta structure Signature where
 private meta def hasInstance (cls : Name) (type : Expr) : MetaM Bool := do
   try
     return (← trySynthInstance (← mkAppM cls #[type])) matches .some _
+  catch _ =>
+    return false
+
+/-- Whether `type` has a `LawfulQuery` instance, with the `ToQuery` instance it needs. -/
+private meta def hasLawfulQuery (type : Expr) : MetaM Bool := do
+  try
+    let cls ← mkAppOptM ``Espal.LawfulQuery #[type, none, none]
+    return (← trySynthInstance cls) matches .some _
   catch _ =>
     return false
 
@@ -228,6 +257,7 @@ private meta def readHandler (handler : Name) (captures : List String) (path met
     let mut args := #[]
     let mut callArgs := #[]
     let mut queries := #[]
+    let mut queryTypes? : Option (Array Term) := some #[]
     let mut body? : Option (Name × Expr) := none
     for decl in decls[1:] do
       let name := decl.userName.eraseMacroScopes
@@ -243,6 +273,11 @@ private meta def readHandler (handler : Name) (captures : List String) (path met
         args := args.push (name, kind)
       else if ← hasInstance ``Espal.FromQuery decl.type then
         queries := queries.push name
+        if ← hasLawfulQuery decl.type then
+          let type ← withOptions (pp.fullNames.set · true) (PrettyPrinter.delab decl.type)
+          queryTypes? := queryTypes?.map (·.push type)
+        else
+          queryTypes? := none
       else if let some (first, _) := body? then
         throwError m!"handler `{shown}` takes `{first}` and `{name}`, and path `{path}` has no \
           capture for either. A handler reads at most one argument from the request body."
@@ -264,7 +299,7 @@ private meta def readHandler (handler : Name) (captures : List String) (path met
         Return `Text` for plain text, or a type that derives `Json`."
     let sig : Signature :=
       { args := args.toList, callArgs := callArgs.toList, queries := queries.toList
-        body? := body?.map (·.1) }
+        queryTypes? := queryTypes?.map (·.toList), body? := body?.map (·.1) }
     return sig
 
 /-- The syntax of `seg` as a `Routing.PathSeg` literal. -/
@@ -347,7 +382,8 @@ elab_rules : command
         | .error msg => throwErrorAt pathLit msg
       parsed := parsed.push
         { ref := row, methodText, method, path, handler, segs, args := sig.args
-          callArgs := sig.callArgs, queries := sig.queries, body? := sig.body? }
+          callArgs := sig.callArgs, queries := sig.queries, queryTypes? := sig.queryTypes?
+          body? := sig.body? }
     -- The check `linksDisjoint` makes, run here so the error names both routes.
     let rowsArr := parsed
     for hj : j in [0:rowsArr.size] do
@@ -432,5 +468,70 @@ elab_rules : command
           withExporting (isExporting := isPublic) <|
             addDecl (.thmDecl { name := declName, levelParams := [], type, value })
           addDeclarationRangesFromSyntax declName r.ref
+      -- `linkTo` and its theorem, when every query argument can be written back.
+      let some queryTypes := r.queryTypes?
+        | continue
+      let linkArgs := r.callArgs.filter fun n => some n != r.body?
+      let linkTypes : List Term := linkArgs.map fun n =>
+        match r.args.find? (·.1 == n), (r.queries.zip queryTypes).find? (·.1 == n) with
+        | some (_, kind), _ => kindType kind
+        | none, some (_, type) => type
+        | none, none => mkCIdent ``Unit
+      let linkIdents : Array Ident := linkArgs.toArray.map fun n => mkIdent n
+      let linkTerms : Array Term := linkIdents.map (·)
+      let linkType ← linkTypes.foldrM (init := ← `(Espal.Link)) fun type acc => `($type → $acc)
+      let noQuery ← `(([] : Espal.Query))
+      let queryTerm ← r.queries.foldrM (init := noQuery) fun q acc =>
+        `(Espal.Query.with $(quote q.toString) $(mkIdent q) $acc)
+      let link ← `((⟨Espal.Route.pathOf $segsTerm $argsTerm, $queryTerm⟩ : Espal.Link))
+      let linkFn ← if linkIdents.isEmpty then pure link
+        else `(fun $(linkIdents.map funBinder)* => $link)
+      let linkInst := mkIdentFrom apiId (apiName ++ (`instLinkTo).appendAfter
+        (lastComponent r.handler).capitalize)
+      elabCommand <| ← `(command|
+        instance $linkInst:ident : Espal.LinkTo $handlerIdent $linkType := ⟨$linkFn⟩)
+      let linkBinders ← (linkArgs.zip linkTypes).toArray.mapM fun (n, type) =>
+        `(Lean.Parser.Term.bracketedBinderF| ($(mkIdent n) : $type))
+      let fresh (base : String) : Ident :=
+        mkIdent (Name.mkSimple (if r.callArgs.contains (Name.mkSimple base) then base ++ "'" else base))
+      let contentType := fresh "contentType"
+      let bytes := fresh "bytes"
+      let hypTerms : Array Term := (captures r.segs).toArray.filterMap fun (n, kind) =>
+        match kind with
+        | .string => some (mkIdent (Name.mkSimple s!"h_{n}"))
+        | .nat => none
+      let callArgs : Array Term := r.callArgs.toArray.map fun n => mkIdent n
+      let call ← `($handlerIdent {} $callArgs*)
+      let supplied ← match r.body? with
+        | none => `(Espal.Endpoint.ofValue $call)
+        | some body => `(Espal.Endpoint.ofBody fun $(funBinder (mkIdent body)) => $call)
+      let pathThm := mkIdentFrom apiId
+        (apiName ++ Name.mkSimple s!"pathTo_{lastComponent r.handler}")
+      let linkThm := mkIdentFrom r.ref
+        (apiName ++ Name.mkSimple s!"linkTo_{lastComponent r.handler}")
+      let linkProof ←
+        if r.queries.isEmpty then
+          `(Lean.Parser.Tactic.tacticSeq|
+            rw [show (Espal.linkTo $handlerIdent $linkTerms*).path =
+                Espal.pathTo $handlerIdent $binderTerms* from rfl,
+              $pathThm:ident $binderTerms* $hypTerms*]
+            rfl)
+        else
+          `(Lean.Parser.Tactic.tacticSeq|
+            have hp : (Espal.linkTo $handlerIdent $linkTerms*).path =
+                Espal.pathTo $handlerIdent $binderTerms* := rfl
+            have hq : (Espal.linkTo $handlerIdent $linkTerms*).query = $queryTerm := rfl
+            rw [hp, hq, $pathThm:ident $binderTerms* $hypTerms*]
+            simp [Espal.Endpoint.ofValue, Espal.Endpoint.ofBody, Espal.Endpoint.ofQueryBody,
+              Espal.withQuery])
+      elabCommand <| ← `(command|
+        theorem $linkThm:ident $linkBinders:bracketedBinder* $linkableBinders:bracketedBinder*
+            ($contentType : Option String) ($bytes : ByteArray) :
+            (Routing.matchTable (Espal.Api.routes $apiId) $(mkCIdent r.method)
+                (Espal.linkTo $handlerIdent $linkTerms*).path).map
+              (fun m =>
+                Espal.Endpoint.reply m.2 (Espal.linkTo $handlerIdent $linkTerms*).query
+                  $contentType $bytes) =
+              some (Espal.Endpoint.reply $supplied [] $contentType $bytes) := by $linkProof)
 
 end Espal.ApiCommand
