@@ -6,6 +6,8 @@ Authors: Christian Murphy
 module
 
 public import EspalCore.Access
+public import EspalCore.Effect
+public import EspalCore.EffectRun
 public import EspalCore.Handler
 public import EspalCore.Query
 public import EspalCore.Reply
