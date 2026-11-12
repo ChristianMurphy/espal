@@ -39,6 +39,9 @@ The command also declares `linkTo h` and a theorem `Bench.linkTo_h`. `linkTo h` 
 captures and query arguments and builds a `Link`, which holds the path and the query parameters.
 The theorem shows that following the link gives the reply of `h` for those arguments. A handler
 gets no `linkTo` when one of its query arguments has no `LawfulQuery` instance.
+
+A handler can link to another row of its own table. It takes that row's `LinkTo` or `PathTo`
+instance as an instance argument, and the command fills it when it builds the table.
 -/
 
 @[expose] public section
@@ -250,8 +253,11 @@ private meta def readHandler (handler : Name) (captures : List String) (path met
     unless ← withReducible (isDefEq (← inferType access) (mkConst ``Espal.Public)) do
       throwError noAccess
     let decls ← xs.mapM fun x => getFVarLocalDecl x
+    let isLink (decl : LocalDecl) : Bool :=
+      decl.binderInfo.isInstImplicit &&
+        (decl.type.isAppOf ``Espal.LinkTo || decl.type.isAppOf ``Espal.PathTo)
     for decl in decls do
-      unless decl.binderInfo.isExplicit do
+      unless decl.binderInfo.isExplicit || isLink decl do
         throwError m!"handler `{shown}` takes `{decl.userName}` as an implicit argument, which \
           an `api` row has no way to fill."
     let mut args := #[]
@@ -260,6 +266,8 @@ private meta def readHandler (handler : Name) (captures : List String) (path met
     let mut queryTypes? : Option (Array Term) := some #[]
     let mut body? : Option (Name × Expr) := none
     for decl in decls[1:] do
+      if isLink decl then
+        continue
       let name := decl.userName.eraseMacroScopes
       callArgs := callArgs.push name
       if captures.contains name.toString then
@@ -394,6 +402,42 @@ elab_rules : command
           throwErrorAt later.ref m!"{earlier.display} accepts links built for the later \
             route {later.display}.\nThose links would reach the wrong handler. Change one of \
             the two paths."
+    -- The `PathTo` and `LinkTo` instances come before the table, so a handler in it can take one
+    -- as an instance argument and link to another row.
+    for r in rowsArr do
+      let segs : Array Term ← r.segs.toArray.mapM segSyntax
+      let segsTerm ← `([$segs,*])
+      let argsTerm ← argsSyntax r.segs
+      let binders : Array Ident := r.args.toArray.map fun (n, _) => mkIdent n
+      let pathType ← r.args.foldrM (init := ← `(List String)) fun (_, kind) acc =>
+        `($(kindType kind) → $acc)
+      let pathFn ← if binders.isEmpty then `(Espal.Route.pathOf $segsTerm $argsTerm)
+        else `(fun $(binders.map funBinder)* => Espal.Route.pathOf $segsTerm $argsTerm)
+      let handlerIdent := mkCIdent r.handler
+      let instName := mkIdentFrom apiId (apiName ++ (`instPathTo).appendAfter
+        (lastComponent r.handler).capitalize)
+      elabCommand <| ← `(command|
+        instance $instName:ident : Espal.PathTo $handlerIdent $pathType := ⟨$pathFn⟩)
+      let some queryTypes := r.queryTypes?
+        | continue
+      let linkArgs := r.callArgs.filter fun n => some n != r.body?
+      let linkTypes : List Term := linkArgs.map fun n =>
+        match r.args.find? (·.1 == n), (r.queries.zip queryTypes).find? (·.1 == n) with
+        | some (_, kind), _ => kindType kind
+        | none, some (_, type) => type
+        | none, none => mkCIdent ``Unit
+      let linkIdents : Array Ident := linkArgs.toArray.map fun n => mkIdent n
+      let linkType ← linkTypes.foldrM (init := ← `(Espal.Link)) fun type acc => `($type → $acc)
+      let noQuery ← `(([] : Espal.Query))
+      let queryTerm ← r.queries.foldrM (init := noQuery) fun q acc =>
+        `(Espal.Query.with $(quote q.toString) $(mkIdent q) $acc)
+      let link ← `((⟨Espal.Route.pathOf $segsTerm $argsTerm, $queryTerm⟩ : Espal.Link))
+      let linkFn ← if linkIdents.isEmpty then pure link
+        else `(fun $(linkIdents.map funBinder)* => $link)
+      let linkInst := mkIdentFrom apiId (apiName ++ (`instLinkTo).appendAfter
+        (lastComponent r.handler).capitalize)
+      elabCommand <| ← `(command|
+        instance $linkInst:ident : Espal.LinkTo $handlerIdent $linkType := ⟨$linkFn⟩)
     -- `def Name`, an `Api` with the routes. The kernel checks `keysDisjoint`, which
     -- `keysDisjoint_map_routeKey` turns into `linksDisjoint`.
     let routeTerms ← rowsArr.mapM fun r => liftTermElabM do
@@ -411,7 +455,7 @@ elab_rules : command
            links_disjoint := by
             rw [← Espal.Route.keysDisjoint_map_routeKey]
             decide +kernel } : Espal.Api Espal.Endpoint))
-    -- `pathTo` and its theorem for each handler.
+    -- The theorems for `pathTo` and `linkTo`, for each handler.
     for hidx : idx in [0:rowsArr.size] do
       let r := rowsArr[idx]
       let segs : Array Term ← r.segs.toArray.mapM segSyntax
@@ -419,15 +463,7 @@ elab_rules : command
       let argsTerm ← argsSyntax r.segs
       let binders : Array Ident := r.args.toArray.map fun (n, _) => mkIdent n
       let binderTerms : Array Term := binders.map (·)
-      let pathType ← r.args.foldrM (init := ← `(List String)) fun (_, kind) acc =>
-        `($(kindType kind) → $acc)
-      let pathFn ← if binders.isEmpty then `(Espal.Route.pathOf $segsTerm $argsTerm)
-        else `(fun $(binders.map funBinder)* => Espal.Route.pathOf $segsTerm $argsTerm)
       let handlerIdent := mkCIdent r.handler
-      let instName := mkIdentFrom apiId (apiName ++ (`instPathTo).appendAfter
-        (lastComponent r.handler).capitalize)
-      elabCommand <| ← `(command|
-        instance $instName:ident : Espal.PathTo $handlerIdent $pathType := ⟨$pathFn⟩)
       let explicitBinders ← r.args.toArray.mapM fun (n, kind) =>
         `(Lean.Parser.Term.bracketedBinderF| ($(mkIdent n) : $(kindType kind)))
       let linkableBinders ← (captures r.segs).toArray.filterMapM fun (n, kind) =>
@@ -468,7 +504,7 @@ elab_rules : command
           withExporting (isExporting := isPublic) <|
             addDecl (.thmDecl { name := declName, levelParams := [], type, value })
           addDeclarationRangesFromSyntax declName r.ref
-      -- `linkTo` and its theorem, when every query argument can be written back.
+      -- The `linkTo` theorem, when every query argument can be written back.
       let some queryTypes := r.queryTypes?
         | continue
       let linkArgs := r.callArgs.filter fun n => some n != r.body?
@@ -479,17 +515,9 @@ elab_rules : command
         | none, none => mkCIdent ``Unit
       let linkIdents : Array Ident := linkArgs.toArray.map fun n => mkIdent n
       let linkTerms : Array Term := linkIdents.map (·)
-      let linkType ← linkTypes.foldrM (init := ← `(Espal.Link)) fun type acc => `($type → $acc)
       let noQuery ← `(([] : Espal.Query))
       let queryTerm ← r.queries.foldrM (init := noQuery) fun q acc =>
         `(Espal.Query.with $(quote q.toString) $(mkIdent q) $acc)
-      let link ← `((⟨Espal.Route.pathOf $segsTerm $argsTerm, $queryTerm⟩ : Espal.Link))
-      let linkFn ← if linkIdents.isEmpty then pure link
-        else `(fun $(linkIdents.map funBinder)* => $link)
-      let linkInst := mkIdentFrom apiId (apiName ++ (`instLinkTo).appendAfter
-        (lastComponent r.handler).capitalize)
-      elabCommand <| ← `(command|
-        instance $linkInst:ident : Espal.LinkTo $handlerIdent $linkType := ⟨$linkFn⟩)
       let linkBinders ← (linkArgs.zip linkTypes).toArray.mapM fun (n, type) =>
         `(Lean.Parser.Term.bracketedBinderF| ($(mkIdent n) : $type))
       let fresh (base : String) : Ident :=
