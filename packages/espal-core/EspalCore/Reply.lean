@@ -173,4 +173,18 @@ def Endpoint.reply (endpoint : Endpoint) (query : Query) (contentType : Option S
   | none, .noBody run => run query
   | none, .withBody _ run => run query body
 
+@[simp]
+theorem Endpoint.reply_noBody (run : Query → Reply) (query : Query) (contentType : Option String)
+    (body : ByteArray) : (Endpoint.noBody run).reply query contentType body = run query :=
+  rfl
+
+@[simp]
+theorem Endpoint.reply_withBody (mediaType : String) (run : Query → ByteArray → Reply)
+    (query : Query) (contentType : Option String) (body : ByteArray) :
+    (Endpoint.withBody mediaType run).reply query contentType body =
+      if declaresMedia mediaType contentType then run query body
+      else .unsupportedMedia mediaType := by
+  simp only [Endpoint.reply, Endpoint.refusal?]
+  split <;> simp_all
+
 end Espal

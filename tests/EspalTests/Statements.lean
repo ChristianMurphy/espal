@@ -275,3 +275,22 @@ info: Espal.Api.mem_allowed_iff {α : Type} (t : Espal.Api α) (path : List Stri
 /-- info: 'Espal.Api.mem_allowed_iff' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms Espal.Api.mem_allowed_iff
+
+/--
+info: Espal.LawfulQuery.fromQuery_toQuery {α : Type} {inst✝ : Espal.ToQuery α} {inst✝¹ : Espal.FromQuery α}
+  [self : Espal.LawfulQuery α] (x : α) : Espal.fromQuery (Espal.toQuery x) = Except.ok x
+-/
+#guard_msgs in
+#check Espal.LawfulQuery.fromQuery_toQuery
+
+/-- info: 'Espal.instLawfulQueryNat' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.instLawfulQueryNat
+
+/-- info: 'Espal.instLawfulQueryClamp' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.instLawfulQueryClamp
+
+/-- info: 'Espal.instLawfulQueryOptionOfPresentQuery' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.instLawfulQueryOptionOfPresentQuery
