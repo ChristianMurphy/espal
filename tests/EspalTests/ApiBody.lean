@@ -45,8 +45,7 @@ with. -/
 def answer (method : Std.Http.Method) (path : List String) (body : String)
     (contentType : Option String := some "application/json") : Option (UInt16 × String × String) :=
   do
-  let (_, endpoint) ← matchTable Users.routes method path
-  let reply := endpoint.reply [] contentType body.toUTF8
+  let reply ← Users.reply? method path [] contentType body.toUTF8
   return (reply.status, reply.contentType, ← String.fromUTF8? reply.body)
 
 /-! A row without a body answers at once, and a row with one decodes it first. -/
@@ -118,7 +117,7 @@ ignores the header. -/
 
 #guard
   ((matchTable Users.routes .post ["users"]).map fun (_, endpoint) =>
-      (endpoint.reply [] (some "text/plain") ByteArray.empty).headers) ==
+      (endpoint.reply [] (some "text/plain") ByteArray.empty).value.headers) ==
     some [("accept-post", "application/json")]
 
 #guard (answer .get ["hello"] "" none).map (·.1) == some 200

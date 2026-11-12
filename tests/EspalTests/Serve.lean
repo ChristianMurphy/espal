@@ -30,7 +30,12 @@ def echo (_ : Public) (note : Note) : Note :=
 def rows (_ : Public) (queries : Clamp 1 500) (label : Option String) : Text :=
   s!"{queries.val} rows {label}"
 
+def clock (_ : Public) : Handler Text := do
+  let t ← now
+  return s!"{t}"
+
 api Bench where
+  GET "/clock" => clock
   GET "/plaintext" => plaintext
   GET "/users/:id" => showUser
   POST "/notes" => echo
@@ -151,3 +156,11 @@ def check (label : String) (ok : Bool) : IO Unit :=
     let result ← answer (← postRequest "/notes" oversized (some "text/plain"))
     check s!"an oversized body of the wrong type should get 415, got {repr result}"
         (result.1 == .unsupportedMediaType)
+
+/-! The server answers an effectful handler from the machine's own clock. -/
+
+#eval
+  show IO Unit from do
+    let (status, text) ← get "/clock"
+    check s!"GET /clock should get a current timestamp, got {repr (status, text)}"
+        (status == .ok && (text.toNat?.getD 0) > 1700000000000)

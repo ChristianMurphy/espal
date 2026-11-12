@@ -12,13 +12,13 @@ path = "../espal-route"
 # path to its own checkout.
 [[require]]
 name = "routing"
-git = "https://github.com/paulbutcher/lean-routing"
-rev = "v0.15.1"
+git = "https://github.com/ChristianMurphy/lean-routing"
+rev = "d3fb755fbc254adc3199f13810c6efc8188d4446"
 
 [[require]]
 name = "routing-std"
-git = "https://github.com/paulbutcher/lean-routing"
-rev = "v0.15.1"
+git = "https://github.com/ChristianMurphy/lean-routing"
+rev = "d3fb755fbc254adc3199f13810c6efc8188d4446"
 subDir = "std"
 
 [[lean_lib]]

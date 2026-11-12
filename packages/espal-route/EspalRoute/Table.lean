@@ -27,6 +27,7 @@ target, is the HTTP layer's job.
 
 namespace Espal.Route
 
+universe u v
 open Routing
 
 /-- One value per capture in `segs`, in order. -/
@@ -50,7 +51,7 @@ def Linkable : (segs : List PathSeg) → Args segs → Prop
   | .capture _ .string :: rest, (s, args) => unlinkable s = false ∧ Linkable rest args
 
 /-- The handler applied to `args`. -/
-def applyHandler {α : Type} : (segs : List PathSeg) → HandlerType segs α → Args segs → α
+def applyHandler {α : Type u} : (segs : List PathSeg) → HandlerType segs α → Args segs → α
   | [], h, _ => h
   | .lit _ _ :: rest, h, args => applyHandler rest h args
   | .capture _ _ :: rest, h, (a, args) => applyHandler rest (h a) args
@@ -89,7 +90,7 @@ def overlaps : List PathSeg → List PathSeg → Bool
 /-- No route accepts a path that a link renders for a later route with the same method. Methods
 compare with `DecidableEq`, since the kernel can't unfold `Method`'s `BEq` instance outside
 `Std.Http`. -/
-def linksDisjoint {α : Type} : List (Route α) → Bool
+def linksDisjoint {α : Type u} : List (Route α) → Bool
   | [] => true
   | r :: rs =>
     rs.all (fun i => decide (r.method ≠ i.method) || !overlaps r.segs i.segs) && linksDisjoint rs
@@ -197,7 +198,7 @@ theorem natAccepts_eq (s : String) : natAccepts s = (Internal.parseNat? s).isSom
       cases hp
 
 /-- A route accepts every link built for its own pattern. -/
-theorem dispatch_pathOf {α : Type} :
+theorem dispatch_pathOf {α : Type u} :
     ∀ (segs : List PathSeg) (h : HandlerType segs α) (args : Args segs),
       Linkable segs args → dispatch segs h (pathOf segs args) = some (applyHandler segs h args)
   | [], h, _, _ => by simp [pathOf, dispatch, applyHandler]
@@ -220,7 +221,7 @@ theorem length_pathOf :
   | .capture _ .string :: rest, (_, args) => by simp [pathOf, length_pathOf rest args]
 
 /-- The empty pattern accepts only the empty path and a lone empty segment. -/
-theorem dispatch_nil_cons {α : Type} (h : HandlerType [] α) (p : String) (ps : List String)
+theorem dispatch_nil_cons {α : Type u} (h : HandlerType [] α) (p : String) (ps : List String)
     (hp : p :: ps ≠ [""]) : dispatch [] h (p :: ps) = none := by
   cases ps with
   | nil =>
@@ -230,14 +231,14 @@ theorem dispatch_nil_cons {α : Type} (h : HandlerType [] α) (p : String) (ps :
   | cons q qs => simp [dispatch]
 
 /-- A pattern with a segment rejects the empty path. -/
-theorem dispatch_cons_nil {α : Type} (j : PathSeg) (js : List PathSeg)
+theorem dispatch_cons_nil {α : Type u} (j : PathSeg) (js : List PathSeg)
     (h : HandlerType (j :: js) α) : dispatch (j :: js) h [] = none := by
   rcases j with ⟨_, _⟩ | ⟨_, k⟩
   · rfl
   · cases k <;> rfl
 
 /-- A route that `overlaps` rules out rejects every link built for the other pattern. -/
-theorem dispatch_pathOf_eq_none {α : Type} :
+theorem dispatch_pathOf_eq_none {α : Type u} :
     ∀ (js is : List PathSeg) (h : HandlerType js α) (args : Args is),
       overlaps js is = false → Linkable is args → dispatch js h (pathOf is args) = none
   | [], [], _, _, ho, _ => by simp [overlaps] at ho
@@ -347,7 +348,7 @@ theorem method_eq_of_beq {a b : Std.Http.Method} (h : (a == b) = true) : a = b :
 
 /-- In a table where `linksDisjoint` holds, every link reaches the route it was built for, with the
 arguments it was built from. -/
-theorem matchTable_pathOf {α : Type} {routes : List (Route α)} (h : linksDisjoint routes = true)
+theorem matchTable_pathOf {α : Type u} {routes : List (Route α)} (h : linksDisjoint routes = true)
     (i : Fin routes.length) (args : Args routes[i].segs) (hl : Linkable routes[i].segs args) :
     matchTable routes routes[i].method (pathOf routes[i].segs args) =
       some
@@ -410,7 +411,7 @@ theorem overlaps_of_covers :
 
 /-- A table where `linksDisjoint` holds has no route that lean-routing would reject as shadowed. It
 can then build a `RouteIndex` without checking the table again. -/
-theorem unshadowed_of_linksDisjoint {α : Type} {routes : List (Route α)}
+theorem unshadowed_of_linksDisjoint {α : Type u} {routes : List (Route α)}
     (h : linksDisjoint routes = true) : Internal.unshadowed (routes.map Route.key) = true := by
   induction routes with
   | nil => rfl
@@ -433,18 +434,18 @@ theorem unshadowed_of_linksDisjoint {α : Type} {routes : List (Route α)}
     · exact Or.inl hm
 
 /-- `h` with `f` applied to its result, once all its captures are given. -/
-def mapHandler {α β : Type} (f : α → β) :
+def mapHandler {α : Type u} {β : Type v} (f : α → β) :
     (segs : List PathSeg) → HandlerType segs α → HandlerType segs β
   | [], h => f h
   | .lit _ _ :: rest, h => mapHandler f rest h
   | .capture _ _ :: rest, h => fun a => mapHandler f rest (h a)
 
 /-- `r` with `f` applied to its handler's result. -/
-def mapRoute {α β : Type} (f : α → β) (r : Route α) : Route β :=
+def mapRoute {α : Type u} {β : Type v} (f : α → β) (r : Route α) : Route β :=
   { method := r.method, segs := r.segs, handler := mapHandler f r.segs r.handler }
 
 /-- `linksDisjoint` reads only methods and patterns, which `mapRoute` keeps. -/
-theorem linksDisjoint_map {α β : Type} (f : α → β) (routes : List (Route α)) :
+theorem linksDisjoint_map {α : Type u} {β : Type v} (f : α → β) (routes : List (Route α)) :
     linksDisjoint (routes.map (mapRoute f)) = linksDisjoint routes := by
   induction routes with
   | nil => rfl
@@ -574,7 +575,7 @@ structure RouteKey where
   segs : List SegKey
 
 /-- The key of a route. -/
-def routeKey {α : Type} (r : Route α) : RouteKey :=
+def routeKey {α : Type u} (r : Route α) : RouteKey :=
   ⟨r.method.ctorIdx, r.segs.map segKey⟩
 
 /-- `List.all` through `List.rec`. -/
@@ -592,7 +593,7 @@ theorem keysDisjoint_cons (k : RouteKey) (ks : List RouteKey) :
         keysDisjoint ks) :=
   rfl
 
-theorem allKeys_map {α : Type} (p : RouteKey → Bool) (f : α → RouteKey) (l : List α) :
+theorem allKeys_map {α : Type u} (p : RouteKey → Bool) (f : α → RouteKey) (l : List α) :
     allKeys p (l.map f) = l.all (fun a => p (f a)) := by
   induction l with
   | nil => rfl
@@ -607,7 +608,7 @@ theorem not_ctorIdx_beq (a b : Std.Http.Method) : (!a.ctorIdx.beq b.ctorIdx) = d
 
 /-- `keysDisjoint` on a table's keys equals `linksDisjoint`, so `decide +kernel` can check the
 cheaper one. -/
-theorem keysDisjoint_map_routeKey {α : Type} (routes : List (Route α)) :
+theorem keysDisjoint_map_routeKey {α : Type u} (routes : List (Route α)) :
     keysDisjoint (routes.map routeKey) = linksDisjoint routes := by
   induction routes with
   | nil => rfl

@@ -28,7 +28,7 @@ def showPost (_ : Public) (slug : String) (id : Nat) : Text :=
 /-- The text of an endpoint that answers without a body, which is what these handlers build. -/
 def text (endpoint : Endpoint) : Option String :=
   match endpoint with
-  | .noBody run => String.fromUTF8? (run []).body
+  | .noBody run => String.fromUTF8? (run []).value.body
   | .withBody _ _ => none
 
 /-! The same path under two methods is fine, and the arguments of `showPost` come in a different

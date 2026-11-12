@@ -170,7 +170,12 @@ def Eff.eval {α : Type} (x : Eff α) (world : World) : α × World :=
   match FreerD.foldSt (ε := Empty) (fun e s => .ok (Op.answer e s)) x world with
   | .ok result => result
 
+/-- The result of `x` against `world`, without the world after it. Tests read a reply this way. -/
+def Eff.value {α : Type} (x : Eff α) (world : World := { clock := 0 }) : α :=
+  (x.eval world).1
+
 /-- A program that only returns a value leaves the world as it was. -/
+@[simp]
 theorem Eff.eval_pure {α : Type} (a : α) (world : World) :
     (pure a : Eff α).eval world = (a, world) :=
   rfl
@@ -203,5 +208,13 @@ theorem Eff.eval_bind {α β : Type} (x : Eff α) (f : α → Eff β) (world : W
   cases FreerD.foldSt (ε := Empty) (fun e s => .ok (Op.answer e s)) x world with
   | error e => exact e.elim
   | ok r => rfl
+
+/-- Mapping a function over a program applies it to the result and leaves the world alone. -/
+@[simp]
+theorem Eff.eval_map {α β : Type} (f : α → β) (x : Eff α) (world : World) :
+    (f <$> x).eval world = (f (x.eval world).1, (x.eval world).2) := by
+  show (x >>= fun a => pure (f a)).eval world = _
+  rw [Eff.eval_bind]
+  rfl
 
 end Espal

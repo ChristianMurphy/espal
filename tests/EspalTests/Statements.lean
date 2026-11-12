@@ -44,7 +44,7 @@ info: 'Espal.Route.natSeg_ne_of_parseNatSeg_none' depends on axioms: [propext, C
 #print axioms Espal.Route.natSeg_ne_of_parseNatSeg_none
 
 /--
-info: @Espal.Route.matchTable_pathOf : ∀ {α : Type} {routes : List (Routing.Route α)},
+info: @Espal.Route.matchTable_pathOf : ∀ {α : Type u_1} {routes : List (Routing.Route α)},
   Espal.Route.linksDisjoint routes = true →
     ∀ (i : Fin routes.length) (args : Espal.Route.Args routes[i].segs),
       Espal.Route.Linkable routes[i].segs args →
@@ -61,7 +61,7 @@ info: @Espal.Route.matchTable_pathOf : ∀ {α : Type} {routes : List (Routing.R
 #print axioms Espal.Route.matchTable_pathOf
 
 /--
-info: @Espal.Route.keysDisjoint_map_routeKey : ∀ {α : Type} (routes : List (Routing.Route α)),
+info: @Espal.Route.keysDisjoint_map_routeKey : ∀ {α : Type u_1} (routes : List (Routing.Route α)),
   Espal.Route.keysDisjoint (List.map Espal.Route.routeKey routes) = Espal.Route.linksDisjoint routes
 -/
 #guard_msgs in
@@ -82,7 +82,7 @@ info: Espal.Route.natAccepts_eq : ∀ (s : String), Espal.Route.natAccepts s = (
 #print axioms Espal.Route.natAccepts_eq
 
 /--
-info: @Espal.Api.matchTable_pathOf : ∀ {α : Type} (t : Espal.Api α) (i : Fin t.routes.length)
+info: @Espal.Api.matchTable_pathOf : ∀ {α : Type u_1} (t : Espal.Api α) (i : Fin t.routes.length)
   (args : Espal.Route.Args t.routes[i].segs),
   Espal.Route.Linkable t.routes[i].segs args →
     Routing.matchTable t.routes t.routes[i].method (Espal.Route.pathOf t.routes[i].segs args) =
@@ -98,7 +98,7 @@ info: @Espal.Api.matchTable_pathOf : ∀ {α : Type} (t : Espal.Api α) (i : Fin
 #print axioms Espal.Api.matchTable_pathOf
 
 /--
-info: @Espal.Route.unshadowed_of_linksDisjoint : ∀ {α : Type} {routes : List (Routing.Route α)},
+info: @Espal.Route.unshadowed_of_linksDisjoint : ∀ {α : Type u_1} {routes : List (Routing.Route α)},
   Espal.Route.linksDisjoint routes = true → Routing.Internal.unshadowed (List.map Routing.Route.key routes) = true
 -/
 #guard_msgs in
@@ -115,7 +115,7 @@ info: 'Espal.Route.unshadowed_of_linksDisjoint' depends on axioms: [propext, Cla
 #print axioms Espal.Api.index
 
 /--
-info: @Espal.Route.linksDisjoint_map : ∀ {α β : Type} (f : α → β) (routes : List (Routing.Route α)),
+info: @Espal.Route.linksDisjoint_map : ∀ {α : Type u_1} {β : Type u_2} (f : α → β) (routes : List (Routing.Route α)),
   Espal.Route.linksDisjoint (List.map (Espal.Route.mapRoute f) routes) = Espal.Route.linksDisjoint routes
 -/
 #guard_msgs in
@@ -267,7 +267,7 @@ info: Espal.Clamp.fromQuery_ok (lo hi : Nat) (h : lo ≤ hi) (s : Option String)
 #print axioms Espal.Clamp.fromQuery_ok
 
 /--
-info: Espal.Api.mem_allowed_iff {α : Type} (t : Espal.Api α) (path : List String) (m : Std.Http.Method) :
+info: Espal.Api.mem_allowed_iff.{u} {α : Type u} (t : Espal.Api α) (path : List String) (m : Std.Http.Method) :
   m ∈ t.allowed path ↔ (Routing.matchTable t.routes m path).isSome = true
 -/
 #guard_msgs in
