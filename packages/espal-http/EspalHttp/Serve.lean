@@ -40,10 +40,10 @@ def Reply.toResponse (reply : Reply) : ContextAsync (Response Body.Any) :=
       (builder.header? name value).getD builder
   Engine.stdBytes builder reply.body
 
-/-- The decoded query of `request`. A key or value that isn't valid UTF-8 once decoded is left
+/-- The decoded query of `target`. A key or value that isn't valid UTF-8 once decoded is left
 out. -/
-def requestQuery (request : Request Body.Stream) : Query :=
-  request.line.uri.query.toArray.toList.filterMap fun (key, value) => do
+def targetQuery (target : RequestTarget) : Query :=
+  target.query.toArray.toList.filterMap fun (key, value) => do
     let key ← key.decode
     let value ←
       match value with
@@ -52,6 +52,10 @@ def requestQuery (request : Request Body.Stream) : Query :=
       | none =>
         some ""
     return (key, value)
+
+/-- The decoded query of `request`. -/
+def requestQuery (request : Request Body.Stream) : Query :=
+  targetQuery request.line.uri
 
 /-- The response of `endpoint` to `request`. A route that takes a body reads at most `maxBody`
 bytes of it. -/
