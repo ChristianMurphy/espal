@@ -6,6 +6,7 @@ import EspalTests.ApiCreated
 import EspalTests.ApiErrors
 import EspalTests.ApiMethod
 import EspalTests.ApiQuery
+import EspalTests.Effect
 import EspalTests.HttpPath
 import EspalTests.Json
 import EspalTests.JsonDecimal

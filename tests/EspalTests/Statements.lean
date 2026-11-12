@@ -1,5 +1,6 @@
 module
 
+import EspalCore
 import EspalJson
 import EspalRoute
 
@@ -294,3 +295,34 @@ info: Espal.LawfulQuery.fromQuery_toQuery {α : Type} {inst✝ : Espal.ToQuery �
 /-- info: 'Espal.instLawfulQueryOptionOfPresentQuery' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Espal.instLawfulQueryOptionOfPresentQuery
+
+/--
+info: @Espal.runCost_cost_le : ∀ {E : Type → Type 1} {spec : LeanLinq.EffWp E} {cost : {β : Type} → E β → Nat} {ε S : Type}
+  {obs : S → String → Nat} {h : Espal.CostHandler E (fun {α} => spec) (fun {β} => cost) ε S obs} {r : LeanLinq.Grade}
+  {α : Type} {x : LeanLinq.FreerD E (fun {α} => spec) α (LeanLinq.Wp.bill r)} {s : S}
+  {res : { p // ∀ (k₀ : Nat), (LeanLinq.Wp.bill r).sp p.fst (obs s) k₀ (obs p.snd.fst) (k₀ + p.snd.snd) }},
+  Espal.runCost (fun {β} => h) x s = Except.ok res → res.val.snd.snd ≤ LeanLinq.Grade.eval (obs s) r
+-/
+#guard_msgs in
+#check @Espal.runCost_cost_le
+
+/-- info: 'Espal.runCost_cost_le' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.runCost_cost_le
+
+/--
+info: Espal.Eff.eval_bind {α β : Type} (x : Espal.Eff α) (f : α → Espal.Eff β) (world : Espal.World) :
+  (x >>= f).eval world = (f (x.eval world).fst).eval (x.eval world).snd
+-/
+#guard_msgs in
+#check Espal.Eff.eval_bind
+
+/-- info: 'Espal.Eff.eval_bind' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.Eff.eval_bind
+
+/--
+info: Espal.Eff.eval_pure {α : Type} (a : α) (world : Espal.World) : (pure a).eval world = (a, world)
+-/
+#guard_msgs in
+#check Espal.Eff.eval_pure
