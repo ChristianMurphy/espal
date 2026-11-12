@@ -19,11 +19,12 @@ A handler gets the link from `linkTo`. The `api` command declares `linkTo` for a
 after they exist, so a handler that links to another row takes the instance as an argument:
 
 ```
-def createUser (_ : Public) [LinkTo showUser (Nat → Link)] (user : NewUser) : Created User :=
+def createUser (_ : Public) [links_to% showUser] (user : NewUser) : Created User :=
   ⟨linkTo showUser 7, ⟨7, user.name⟩⟩
 ```
 
-The command fills that argument when it builds the table.
+`links_to% showUser` is the type of that instance, read from `showUser`'s signature. The command
+fills the argument when it builds the table.
 -/
 
 @[expose] public section

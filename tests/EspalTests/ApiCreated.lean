@@ -7,7 +7,8 @@ meta import EspalRoute
 
 /-!
 Tests for `Created`. A handler that makes a resource answers `201` with a `Location` header, and
-gets the link to another row of its own table through a `LinkTo` instance argument.
+gets the link to another row of its own table through a `LinkTo` instance argument, which
+`links_to%` writes.
 -/
 
 open Espal Routing Json
@@ -30,8 +31,7 @@ inductive SignupError where
 def showUser (_ : Public) (id : Nat) (tab : Option String) : Text :=
   s!"user {id} {tab}"
 
-def createUser (_ : Public) [LinkTo showUser (Nat → Option String → Link)] (user : NewUser) :
-    Created User :=
+def createUser (_ : Public) [links_to% showUser] (user : NewUser) : Created User :=
   ⟨linkTo showUser 7 (some "a b"), ⟨7, user.name⟩⟩
 
 def signUp (_ : Public) [LinkTo showUser (Nat → Option String → Link)] (user : NewUser) :
@@ -84,6 +84,20 @@ example :
 #guard
   (toReply (⟨⟨["a\r\nx: y"], [("k", "v\r\nz")]⟩, ("" : Text)⟩ : Created Text)).headers ==
     [("location", "/a%0D%0Ax:%20y?k=v%0D%0Az")]
+
+/-! `links_to%` gives the same type as the argument written in full. It leaves out a body, since a
+link carries none. -/
+
+example : (links_to% showUser) = LinkTo showUser (Nat → Option String → Link) :=
+  rfl
+
+example : (links_to% createUser) = LinkTo createUser Link :=
+  rfl
+
+/-- error: Unknown constant `missing` -/
+#guard_msgs in
+example : Type :=
+  links_to% missing
 
 /-! Any other implicit argument is still refused. -/
 
