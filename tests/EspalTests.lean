@@ -13,6 +13,7 @@ import EspalTests.JsonDeriveInductive
 import EspalTests.JsonDeriveParams
 import EspalTests.JsonDeriveRecursive
 import EspalTests.JsonProblem
+import EspalTests.LinkUrl
 import EspalTests.Lint
 import EspalTests.Route
 import EspalTests.RouteTable
