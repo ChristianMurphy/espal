@@ -40,8 +40,8 @@ def greet (name : String) : Eff String := do
 def greetNamed (name : String) : ExceptT String Eff String := do
   if name.isEmpty then
     throw "no name"
-  let t ← liftM (m := Eff) now
-  liftM (m := Eff) (log "greeted")
+  let t ← now
+  log "greeted"
   return s!"{name} {t}"
 
 /-- A run's result, error and world, in a form `#guard` can compare. -/

@@ -31,9 +31,9 @@ def stamp (_ : Public) (sides : Nat) : Handler Text := do
   return s!"{t} {roll}"
 
 def lucky (_ : Public) (want : Nat) : Fails RollError Text := do
-  let roll ← liftM (m := Eff) (random 1 6)
+  let roll ← random 1 6
   if roll != want then
-    liftM (m := Eff) (log "unlucky")
+    log "unlucky"
     throw .conflict
   return "lucky"
 
