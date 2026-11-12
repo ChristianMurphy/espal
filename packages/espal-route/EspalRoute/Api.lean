@@ -44,6 +44,7 @@ gets no `linkTo` when one of its query arguments has no `LawfulQuery` instance.
 
 A handler can link to another row of its own table. It takes that row's `LinkTo` or `PathTo`
 instance as an instance argument, and the command fills it when it builds the table.
+`[links_to% h]` writes the `LinkTo` argument for the handler `h`.
 -/
 
 @[expose] public section
@@ -374,6 +375,28 @@ private meta def endpointSyntax {m : Type → Type} [Monad m] [MonadQuotation m]
       `(Espal.Endpoint.noBody fun $query => $reply)
     | some _ =>
       `(Espal.Endpoint.ofQueryBody fun $query $decode => $reply)
+
+/-- `links_to% h` is the type of the `LinkTo` instance that the `api` command declares for the
+handler `h`. A handler that links to `h` takes it as an instance argument, `[links_to% h]`. -/
+syntax (name := linksTo) "links_to% " ident : term
+
+/-- Reads the link's argument types from the handler's signature. They are its explicit arguments
+after the access value whose types have a `FromQuery` instance, which leaves out a body. -/
+@[term_elab linksTo]
+public meta def elabLinksTo : Term.TermElab := fun stx _ => do
+  let `(links_to% $handlerId:ident) := stx
+    | throwUnsupportedSyntax
+  let handler ← realizeGlobalConstNoOverloadWithInfo handlerId
+  let info ← getConstInfo handler
+  let fnType ←
+    forallTelescope info.type fun xs _ => do
+        let mut kept : Array Expr := #[]
+        for x in xs.extract 1 xs.size do
+          let decl ← getFVarLocalDecl x
+          if decl.binderInfo.isExplicit && (← hasInstance ``Espal.FromQuery decl.type) then
+            kept := kept.push decl.type
+        return kept.foldr (fun type acc => mkForall `_ .default type acc) (mkConst ``Espal.Link)
+  mkAppOptM ``Espal.LinkTo #[none, mkConst handler, fnType]
 
 elab_rules : command
   | `(command| api $apiId:ident where $rows*) => do
