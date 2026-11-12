@@ -57,8 +57,7 @@ api Work where
 /-- The status and text that the route for `method` and `path` answers `body` with. -/
 def answer (method : Std.Http.Method) (path : List String) (body : String := "") :
     Option (UInt16 × String) := do
-  let (_, endpoint) ← matchTable Work.routes method path
-  let reply := endpoint.reply [] (some "application/json") body.toUTF8
+  let reply ← Work.reply? method path [] (some "application/json") body.toUTF8
   return (reply.status, ← String.fromUTF8? reply.body)
 
 /-! A handler that can't fail, and one that succeeds, answer with the value. -/

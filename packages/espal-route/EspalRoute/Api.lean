@@ -28,7 +28,9 @@ the access value. The path capture with the same name fills a later argument, wh
 or a `String`. An argument with no capture of its name reads the query parameter of that name
 when its type has a `FromQuery` instance. At most one other argument is left, and it is the request
 body. Its type needs a `FromBody` instance, and only a POST, PUT or PATCH row takes one. The result type
-needs a `ToReply` instance, and the command wraps each handler into an `Endpoint`.
+needs a `ToAnswer` instance, and the command wraps each handler into an `Endpoint`. A plain value
+has one through `ToReply`, and so do `Handler α` and `Fails ε α`, whose programs may read the clock,
+draw random numbers and log.
 
 For each handler `h`, the command also declares `pathTo h` and a theorem `Bench.pathTo_h`.
 `pathTo h` builds the decoded path of a link to `h` from `h`'s arguments. The theorem shows that
@@ -97,27 +99,36 @@ theorem Api.mem_allowed_iff {α : Type u} (t : Api α) (path : List String) (m :
   have : LawfulBEq Std.Http.Method := ⟨method_eq_of_beq⟩
   exact List.mem_eraseDups.2 (List.mem_map.2 ⟨r, hr, eq_of_beq hbeq⟩)
 
+/-- The reply of `t` to a request, run against `world` with no server. `none` means no route
+matches the method and path. -/
+def Api.reply? (t : Api Endpoint) (method : Std.Http.Method) (path : List String)
+    (query : Query := []) (contentType : Option String := none)
+    (body : ByteArray := ByteArray.empty) (world : World := { clock := 0 }) : Option Reply :=
+  match matchTable t.routes method path with
+  | some (_, endpoint) => some ((endpoint.reply query contentType body).value world)
+  | none => none
+
 /-- The decoded path of a link to `handler`, as a function of the handler's arguments after the
 access value. The `api` command declares an instance for each handler in its table. -/
-class PathTo {τ : Type} (handler : τ) (Path : outParam Type) where
+class PathTo {τ : Type u} (handler : τ) (Path : outParam Type) where
   /-- The path, as a function of the handler's arguments. -/
   pathTo : Path
 
 /-- The decoded path of a link to `handler`, as a function of the handler's arguments after the
 access value. -/
-def pathTo {τ : Type} (handler : τ) {Path : Type} [PathTo handler Path] : Path :=
+def pathTo {τ : Type u} (handler : τ) {Path : Type} [PathTo handler Path] : Path :=
   PathTo.pathTo handler
 
 /-- A link to `handler`, as a function of the handler's arguments after the access value, without
 its body. The `api` command declares an instance for each handler whose query arguments have
 `LawfulQuery` instances. -/
-class LinkTo {τ : Type} (handler : τ) (Fn : outParam Type) where
+class LinkTo {τ : Type u} (handler : τ) (Fn : outParam Type) where
   /-- The link, as a function of the handler's arguments. -/
   linkTo : Fn
 
 /-- A link to `handler`, as a function of the handler's arguments after the access value, without
 its body. Captures fill the path, and query arguments fill the query. -/
-def linkTo {τ : Type} (handler : τ) {Fn : Type} [LinkTo handler Fn] : Fn :=
+def linkTo {τ : Type u} (handler : τ) {Fn : Type} [LinkTo handler Fn] : Fn :=
   LinkTo.linkTo handler
 
 end Espal
@@ -303,7 +314,7 @@ private meta def readHandler (handler : Name) (captures : List String) (path met
     if result.hasAnyFVar fun f => xs.contains (.fvar f) then
       throwError m!"handler `{shown}` has a result type that depends on its arguments, so it \
         has no single reply type."
-    unless ← hasInstance ``Espal.ToReply result do
+    unless ← hasInstance ``Espal.ToAnswer result do
       throwError m!"handler `{shown}` returns `{result}`, which has no `ToReply` instance.\n\
         Return `Text` for plain text, or a type that derives `Json`."
     let sig : Signature :=
@@ -353,7 +364,7 @@ private meta def endpointSyntax {m : Type → Type} [Monad m] [MonadQuotation m]
   else
     let query ← `(query)
     let decode ← `(decode)
-    let mut reply ← `(Espal.toReply $call)
+    let mut reply ← `(Espal.ToAnswer.answer $call)
     if let some body := r.body? then
       reply ← `($decode fun $(funBinder (mkIdent body)) => $reply)
     for q in r.queries.reverse do

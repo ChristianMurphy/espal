@@ -10,9 +10,10 @@ public import EspalCore.Reply
 /-!
 # Handlers that can fail
 
-A handler that can't fail returns `Handler α`. One that can returns `Fails ε α`: a value of type
-`α`, or one of the errors that `ε` lists. Both are `Except`, so `do`, `throw` and `return` work as
-usual. An error answers with its own reply, and the handler's value is never encoded.
+A handler that can't fail returns `Handler α`, which is `Eff α`. One that can returns
+`Fails ε α`, which adds the errors that `ε` lists. Both are monads over `Eff`, so `do`, `throw`
+and `return` work as usual, and a handler may use `now`, `random` and `log`. An error answers with
+its own reply, and the handler's value is never encoded.
 
 The value comes last in both, since Lean finds a monad by dropping a type's last argument. One
 name with an optional error type would put the value first, and `do` would not elaborate.
@@ -26,11 +27,11 @@ namespace Espal
 
 /-- The result of a handler that can't fail. -/
 abbrev Handler (α : Type) :=
-  Except Empty α
+  Eff α
 
 /-- The result of a handler that can fail, which is a value or one of the errors `ε` lists. -/
 abbrev Fails (ε α : Type) :=
-  Except ε α
+  ExceptT ε Eff α
 
 /-- No error has this type, so no reply is ever built. -/
 instance : ToReply Empty :=

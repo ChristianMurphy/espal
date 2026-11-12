@@ -39,8 +39,7 @@ api Site where
 /-- The status and text that the route for `method` and `path` answers `query` and `body` with. -/
 def answer (method : Std.Http.Method) (path : List String) (query : Query) (body : String := "") :
     Option (UInt16 × String) := do
-  let (_, endpoint) ← matchTable Site.routes method path
-  let reply := endpoint.reply query (some "application/json") body.toUTF8
+  let reply ← Site.reply? method path query (some "application/json") body.toUTF8
   return (reply.status, ← String.fromUTF8? reply.body)
 
 /-! A clamped parameter reads a missing or malformed value as its lower bound, and moves any
@@ -103,7 +102,7 @@ info: ApiQueryTests.Site.pathTo_rows :
   matchTable Site.routes Std.Http.Method.get (pathTo rows) =
     some
       ({ method := Std.Http.Method.get, segs := [PathSeg.lit "queries" ⋯] },
-        Endpoint.noBody fun query => withQuery query "queries" fun queries => toReply (rows { } queries))
+        Endpoint.noBody fun query => withQuery query "queries" fun queries => ToAnswer.answer (rows { } queries))
 -/
 #guard_msgs in
 #check Site.pathTo_rows
@@ -153,7 +152,7 @@ info: '_private.EspalTests.ApiQuery.0.ApiQueryTests.Site.linkTo_addNote' depends
 example (q : String) (page : Nat) :
     (matchTable Site.routes .get (linkTo search q page none).path).map
         (fun m => m.2.reply (linkTo search q page none).query none .empty) =
-      some (toReply (search {} q page none)) :=
+      some (ToAnswer.answer (search {} q page none)) :=
   Site.linkTo_search q page none none .empty
 
 /-! Each instance reads back what it writes, at the edges of its type. -/
@@ -192,7 +191,8 @@ api Odd where
   GET "/echo/:bytes" => echoBytes
 
 #guard
-  ((matchTable Odd.routes .get ["halve"]).map fun m => (m.2.reply [("n", "9")] none .empty).body) ==
+  ((matchTable Odd.routes .get ["halve"]).map fun m =>
+      (m.2.reply [("n", "9")] none .empty).value.body) ==
     some "4".toUTF8
 
 /--

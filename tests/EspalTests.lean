@@ -3,6 +3,7 @@ module
 import EspalTests.Api
 import EspalTests.ApiBody
 import EspalTests.ApiCreated
+import EspalTests.ApiEffects
 import EspalTests.ApiErrors
 import EspalTests.ApiMethod
 import EspalTests.ApiQuery

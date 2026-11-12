@@ -36,7 +36,7 @@ def createUser (_ : Public) [LinkTo showUser (Nat → Option String → Link)] (
 
 def signUp (_ : Public) [LinkTo showUser (Nat → Option String → Link)] (user : NewUser) :
     Fails SignupError (Created Text) :=
-  if user.name == "taken" then .error .conflict else .ok ⟨linkTo showUser 8 none, "welcome"⟩
+  if user.name == "taken" then throw .conflict else return ⟨linkTo showUser 8 none, "welcome"⟩
 
 api Users where
   GET "/users/:id" => showUser
@@ -45,8 +45,7 @@ api Users where
 
 /-- The status, `Location` header and text that `POST path` answers the JSON `body` with. -/
 def post (path : List String) (body : String) : Option (UInt16 × Option String × String) := do
-  let (_, endpoint) ← matchTable Users.routes .post path
-  let reply := endpoint.reply [] (some "application/json") body.toUTF8
+  let reply ← Users.reply? .post path [] (some "application/json") body.toUTF8
   return (reply.status, (reply.headers.find? (·.1 == "location")).map (·.2),
       ← String.fromUTF8? reply.body)
 
@@ -58,7 +57,8 @@ def post (path : List String) (body : String) : Option (UInt16 × Option String 
 
 #guard
   ((matchTable Users.routes .post ["users"]).map fun (_, endpoint) =>
-      (endpoint.reply [] (some "application/json") "{\"name\":\"Ada\"}".toUTF8).contentType) ==
+      (endpoint.reply [] (some "application/json")
+          "{\"name\":\"Ada\"}".toUTF8).value.contentType) ==
     some "application/json"
 
 /-! A handler that can fail answers `201` only when it succeeds. -/
@@ -72,7 +72,7 @@ def post (path : List String) (body : String) : Option (UInt16 × Option String 
 example :
     (matchTable Users.routes .get (linkTo showUser 7 (some "a b")).path).map
         (fun m => m.2.reply (linkTo showUser 7 (some "a b")).query none .empty) =
-      some (toReply (showUser {} 7 (some "a b"))) :=
+      some (ToAnswer.answer (showUser {} 7 (some "a b"))) :=
   Users.linkTo_showUser 7 (some "a b") none .empty
 
 /-! A handler with a link argument has its own `linkTo`, without that argument. -/

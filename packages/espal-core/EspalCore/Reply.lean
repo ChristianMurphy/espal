@@ -5,6 +5,7 @@ Authors: Christian Murphy
 -/
 module
 
+public import EspalCore.Effect
 public import EspalCore.Query
 
 /-!
@@ -15,8 +16,13 @@ other headers. An `Endpoint` is what a route does once its path matched. It answ
 request's query, and some endpoints need the request body as well. The `api` command wraps each
 handler into an `Endpoint`, so one table holds handlers with different result and body types.
 
-`ToReply` says how a handler's result becomes a reply, and `FromBody` says how a request body
-becomes a handler's argument. `Text` is a string sent as plain text.
+`ToReply` says how a value becomes a reply, and `FromBody` says how a request body becomes a
+handler's argument. `Text` is a string sent as plain text.
+
+An endpoint answers with a program, an `Eff Reply`, so a handler may read the clock, draw random
+numbers and log. `ToAnswer` turns a handler's result into that program. A plain value answers with
+its reply, and an `Eff` or an `ExceptT` over `Eff` runs first and then answers with its result's
+reply.
 
 `FromBody` also names the media type it reads. A request whose `Content-Type` names another type,
 or none, gets `415`, and the body is never decoded. A browser can't send `application/json` to
@@ -26,6 +32,8 @@ another site without a preflight request, so a form on another site can't post t
 @[expose] public section
 
 namespace Espal
+
+universe u
 
 /-- A response before it reaches the server. -/
 structure Reply where
@@ -42,9 +50,9 @@ structure Reply where
 /-- What a route does once its path matched. -/
 inductive Endpoint where
   /-- The route answers from the query, without reading the request body. -/
-  | noBody (run : Query → Reply)
+  | noBody (run : Query → Eff Reply)
   /-- The route answers from the query and the bytes of a request body of type `mediaType`. -/
-  | withBody (mediaType : String) (run : Query → ByteArray → Reply)
+  | withBody (mediaType : String) (run : Query → ByteArray → Eff Reply)
 
 /-- How a handler's result becomes a reply. -/
 class ToReply (α : Type) where
@@ -60,6 +68,28 @@ class FromBody (β : Type) where
 
 export ToReply (toReply)
 export FromBody (fromBody)
+
+/-- How a handler's result becomes the program that answers the request. -/
+class ToAnswer (ρ : Type u) where
+  /-- The program that answers with `result`. -/
+  answer : ρ → Eff Reply
+
+/-- A plain value answers with its reply. -/
+instance (priority := low) {α : Type} [ToReply α] : ToAnswer α :=
+  ⟨fun value => pure (toReply value)⟩
+
+/-- A program runs, and its result answers with its reply. -/
+instance {α : Type} [ToReply α] : ToAnswer (Eff α) :=
+  ⟨fun program => toReply <$> program⟩
+
+/-- A program that can fail runs, and its value or its error answers with its reply. -/
+instance {ε α : Type} [ToReply ε] [ToReply α] : ToAnswer (ExceptT ε Eff α) :=
+  ⟨fun program => do
+    match ← program.run with
+    | .ok value =>
+      pure (toReply value)
+    | .error error =>
+      pure (toReply error)⟩
 
 instance : ToReply Reply :=
   ⟨id⟩
@@ -130,31 +160,34 @@ def declaresMedia (mediaType : String) (contentType : Option String) : Bool :=
 
 /-- Reads the query parameter `name` and answers with `next`'s reply. A parameter that
 `fromQuery` refuses gets the `400` problem, and `next` doesn't run. -/
-def withQuery {α : Type} [FromQuery α] (query : Query) (name : String) (next : α → Reply) : Reply :=
+def withQuery {α : Type} [FromQuery α] (query : Query) (name : String) (next : α → Eff Reply) :
+    Eff Reply :=
   match fromQuery (query.first? name) with
   | .ok value => next value
-  | .error detail => .badQuery name detail
+  | .error detail => pure (.badQuery name detail)
 
 /-- Reads the request body and answers with `next`'s reply. A body that `fromBody` refuses gets
 its reply, and `next` doesn't run. -/
-def withBytes {β : Type} [FromBody β] (bytes : ByteArray) (next : β → Reply) : Reply :=
+def withBytes {β : Type} [FromBody β] (bytes : ByteArray) (next : β → Eff Reply) : Eff Reply :=
   match fromBody bytes with
   | .ok body => next body
-  | .error reply => reply
+  | .error reply => pure reply
 
 /-- The endpoint of a handler that takes no query parameter and no body. -/
-def Endpoint.ofValue {ρ : Type} [ToReply ρ] (result : ρ) : Endpoint :=
-  .noBody fun _ => toReply result
+def Endpoint.ofValue {ρ : Type u} [ToAnswer ρ] (result : ρ) : Endpoint :=
+  .noBody fun _ => ToAnswer.answer result
 
 /-- The endpoint of a handler that takes a body and no query parameter. A body that `fromBody`
 refuses gets its reply, and the handler doesn't run. -/
-def Endpoint.ofBody {β ρ : Type} [FromBody β] [ToReply ρ] (handler : β → ρ) : Endpoint :=
-  .withBody (FromBody.mediaType β) fun _ bytes => withBytes bytes fun body => toReply (handler body)
+def Endpoint.ofBody {β : Type} {ρ : Type u} [FromBody β] [ToAnswer ρ] (handler : β → ρ) :
+    Endpoint :=
+  .withBody (FromBody.mediaType β) fun _ bytes =>
+    withBytes bytes fun body => ToAnswer.answer (handler body)
 
 /-- The endpoint of a handler that takes query parameters and a body. `run` gets the query and a
 function that decodes the body, so it can check the query first. -/
-def Endpoint.ofQueryBody {β : Type} [FromBody β] (run : Query → ((β → Reply) → Reply) → Reply) :
-    Endpoint :=
+def Endpoint.ofQueryBody {β : Type} [FromBody β]
+    (run : Query → ((β → Eff Reply) → Eff Reply) → Eff Reply) : Endpoint :=
   .withBody (FromBody.mediaType β) fun query bytes => run query (withBytes bytes)
 
 /-- The `415` reply, if `endpoint` takes a body and `contentType` doesn't declare its media
@@ -165,25 +198,27 @@ def Endpoint.refusal? (endpoint : Endpoint) (contentType : Option String) : Opti
   | .withBody mediaType _ =>
     if declaresMedia mediaType contentType then none else some (.unsupportedMedia mediaType)
 
-/-- The reply of `endpoint` to a request with the given query, `Content-Type` header and body. -/
+/-- The program that answers a request with the given query, `Content-Type` header and body. A
+refusal answers at once, and the endpoint's own program doesn't run. -/
 def Endpoint.reply (endpoint : Endpoint) (query : Query) (contentType : Option String)
-    (body : ByteArray) : Reply :=
+    (body : ByteArray) : Eff Reply :=
   match endpoint.refusal? contentType, endpoint with
-  | some refusal, _ => refusal
+  | some refusal, _ => pure refusal
   | none, .noBody run => run query
   | none, .withBody _ run => run query body
 
 @[simp]
-theorem Endpoint.reply_noBody (run : Query → Reply) (query : Query) (contentType : Option String)
-    (body : ByteArray) : (Endpoint.noBody run).reply query contentType body = run query :=
+theorem Endpoint.reply_noBody (run : Query → Eff Reply) (query : Query)
+    (contentType : Option String) (body : ByteArray) :
+    (Endpoint.noBody run).reply query contentType body = run query :=
   rfl
 
 @[simp]
-theorem Endpoint.reply_withBody (mediaType : String) (run : Query → ByteArray → Reply)
+theorem Endpoint.reply_withBody (mediaType : String) (run : Query → ByteArray → Eff Reply)
     (query : Query) (contentType : Option String) (body : ByteArray) :
     (Endpoint.withBody mediaType run).reply query contentType body =
       if declaresMedia mediaType contentType then run query body
-      else .unsupportedMedia mediaType := by
+      else pure (.unsupportedMedia mediaType) := by
   simp only [Endpoint.reply, Endpoint.refusal?]
   split <;> simp_all
 

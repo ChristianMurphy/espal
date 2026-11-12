@@ -5,6 +5,7 @@ Authors: Christian Murphy
 -/
 module
 
+public import EspalCore.EffectRun
 public import EspalRoute.Api
 public import RoutingStd
 
@@ -25,6 +26,7 @@ Espal's link theorem is stated over lean-routing's `matchTable`. The index finds
 
 namespace Espal
 
+universe u
 open Routing Std Async Http
 
 /-- The most bytes of a request body that a route reads by default, 1 MiB. -/
@@ -57,6 +59,11 @@ def targetQuery (target : RequestTarget) : Query :=
 def requestQuery (request : Request Body.Stream) : Query :=
   targetQuery request.line.uri
 
+/-- Runs `program` against the machine and gives the response for its reply. -/
+def respond (program : Eff Reply) : ContextAsync (Response Body.Any) := do
+  let reply ← (program.run : IO Reply)
+  reply.toResponse
+
 /-- The response of `endpoint` to `request`. A route that takes a body reads at most `maxBody`
 bytes of it. -/
 def Endpoint.answer (endpoint : Endpoint) (maxBody : Nat) (request : Request Body.Stream) :
@@ -64,17 +71,17 @@ def Endpoint.answer (endpoint : Endpoint) (maxBody : Nat) (request : Request Bod
   let contentType := (request.line.headers.get? .contentType).map (·.value)
   match endpoint.refusal? contentType, endpoint with
   | some refusal, _ => refusal.toResponse
-  | none, .noBody run => (run (requestQuery request)).toResponse
+  | none, .noBody run => respond (run (requestQuery request))
   | none, .withBody _ run => do
     match ← Engine.stdRead request.body maxBody with
     | .ok bytes =>
-      (run (requestQuery request) bytes).toResponse
+      respond (run (requestQuery request) bytes)
     | .tooLarge =>
       Reply.tooLarge.toResponse
 
 /-- The answer to a request that matched no route. A path that answers other methods gets `405`
 with those methods in `Allow`, and any other path gets `404 Not Found`. -/
-def Api.unmatched {α : Type} (t : Api α) : Result .std := fun request =>
+def Api.unmatched {α : Type u} (t : Api α) : Result .std := fun request =>
   match t.allowed (decodedPath request.line.uri) with
   | [] => defaultNotFound request
   | allow => (Reply.methodNotAllowed (allow.map toString)).toResponse
