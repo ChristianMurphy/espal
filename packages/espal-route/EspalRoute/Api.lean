@@ -48,17 +48,18 @@ instance as an instance argument, and the command fills it when it builds the ta
 
 namespace Espal
 
+universe u v
 open Routing Espal.Route
 
 /-- A route table whose links reach their routes. The `api` command builds one. -/
-structure Api (α : Type) where
+structure Api (α : Type u) where
   /-- The routes, tried in order. -/
   routes : List (Route α)
   /-- No route accepts a link built for a later route with the same method. -/
   links_disjoint : linksDisjoint routes = true
 
 /-- Every link to a route in `api` reaches that route, with the arguments it was built from. -/
-theorem Api.matchTable_pathOf {α : Type} (t : Api α) (i : Fin t.routes.length)
+theorem Api.matchTable_pathOf {α : Type u} (t : Api α) (i : Fin t.routes.length)
     (args : Args t.routes[i].segs) (hl : Linkable t.routes[i].segs args) :
     matchTable t.routes t.routes[i].method (pathOf t.routes[i].segs args) =
       some
@@ -68,22 +69,22 @@ theorem Api.matchTable_pathOf {α : Type} (t : Api α) (i : Fin t.routes.length)
 
 /-- `t` with `f` applied to each handler's result. Mapping keeps each route's method and pattern, so
 `t`'s proof carries over. -/
-def Api.map {α β : Type} (f : α → β) (t : Api α) : Api β where
+def Api.map {α : Type u} {β : Type v} (f : α → β) (t : Api α) : Api β where
   routes := t.routes.map (mapRoute f)
   links_disjoint := (linksDisjoint_map f t.routes).trans t.links_disjoint
 
 /-- lean-routing's route index over `t`'s routes. `t`'s own proof shows that no route is shadowed,
 so building it checks nothing again. -/
-def Api.index {α : Type} (t : Api α) : RouteIndex α :=
+def Api.index {α : Type u} (t : Api α) : RouteIndex α :=
   RouteIndex.of t.routes (unshadowed_of_linksDisjoint t.links_disjoint)
 
 /-- The methods that `path` answers in `t`. A request for `path` with any other method gets `405`
 when this list has a method, and `404` when it has none. -/
-def Api.allowed {α : Type} (t : Api α) (path : List String) : List Std.Http.Method :=
+def Api.allowed {α : Type u} (t : Api α) (path : List String) : List Std.Http.Method :=
   (t.routes.map (·.method)).eraseDups.filter fun m => (matchTable t.routes m path).isSome
 
 /-- `allowed` lists exactly the methods whose route matches the path. -/
-theorem Api.mem_allowed_iff {α : Type} (t : Api α) (path : List String) (m : Std.Http.Method) :
+theorem Api.mem_allowed_iff {α : Type u} (t : Api α) (path : List String) (m : Std.Http.Method) :
     m ∈ t.allowed path ↔ (matchTable t.routes m path).isSome := by
   simp only [Api.allowed, List.mem_filter, and_iff_right_iff_imp]
   intro h
@@ -498,7 +499,9 @@ elab_rules : command
           let i ← Term.elabTermEnsuringType (← `(⟨$idxLit, by decide +kernel⟩))
             (← mkAppM ``Fin #[len])
           Term.synthesizeSyntheticMVarsNoPostponing
-          let proof := mkAppN (mkConst ``Espal.Api.matchTable_pathOf) #[α, table, i, args, hl]
+          let level ← getDecLevel α
+          let proof :=
+            mkAppN (mkConst ``Espal.Api.matchTable_pathOf [level]) #[α, table, i, args, hl]
           let type ← instantiateMVars (← mkForallFVars xs type)
           let value ← instantiateMVars (← mkLambdaFVars xs proof)
           withExporting (isExporting := isPublic) <|

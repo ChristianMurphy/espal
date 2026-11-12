@@ -121,3 +121,26 @@ example :
           { method := .get, segs := [.lit "" (by decide)], handler := "empty" }] =
       false := by
   decide +kernel
+
+/-! A table's handlers may return a value from a higher universe, such as a program. -/
+
+/-- A value that holds a type, so it lives in `Type 1`. -/
+private structure Boxed : Type 1 where
+  Carrier : Type
+  value : Carrier
+  describe : Carrier → String
+
+private def boxedRoutes : List (Routing.Route Boxed) :=
+  [⟨.get, [.lit "n" (by decide), .capture "id" .nat], fun id => ⟨Nat, id, toString⟩⟩]
+
+private def boxedApi : Espal.Api Boxed :=
+  ⟨boxedRoutes, by decide⟩
+
+#guard
+  ((Routing.matchTable boxedApi.routes .get ["n", "7"]).map fun m => m.2.describe m.2.value) ==
+    some "7"
+
+#guard
+  (((boxedApi.map fun boxed => boxed.describe boxed.value).index.matchTable .get ["n", "7"]).map
+      (·.2)) ==
+    some "7"
