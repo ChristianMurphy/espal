@@ -59,23 +59,31 @@ def targetQuery (target : RequestTarget) : Query :=
 def requestQuery (request : Request Body.Stream) : Query :=
   targetQuery request.line.uri
 
-/-- Runs `program` against the machine and gives the response for its reply. -/
-def respond (program : Eff Reply) : ContextAsync (Response Body.Any) := do
-  let reply ← (program.run : IO Reply)
+/-- Runs `program` against the machine, with `database` running its statements, and gives the
+response for its reply. A run that fails answers `500` and logs the error. -/
+def respond (database : Database) (program : Eff Reply) : ContextAsync (Response Body.Any) := do
+  let reply ←
+    (try
+          program.run database
+        catch error =>
+          do
+            IO.eprintln s!"request failed: {error}"
+            pure Reply.internalError :
+        IO Reply)
   reply.toResponse
 
 /-- The response of `endpoint` to `request`. A route that takes a body reads at most `maxBody`
 bytes of it. -/
-def Endpoint.answer (endpoint : Endpoint) (maxBody : Nat) (request : Request Body.Stream) :
-    ContextAsync (Response Body.Any) :=
+def Endpoint.answer (endpoint : Endpoint) (maxBody : Nat) (database : Database)
+    (request : Request Body.Stream) : ContextAsync (Response Body.Any) :=
   let contentType := (request.line.headers.get? .contentType).map (·.value)
   match endpoint.refusal? contentType, endpoint with
   | some refusal, _ => refusal.toResponse
-  | none, .noBody run => respond (run (requestQuery request))
+  | none, .noBody run => respond database (run (requestQuery request))
   | none, .withBody _ run => do
     match ← Engine.stdRead request.body maxBody with
     | .ok bytes =>
-      respond (run (requestQuery request) bytes)
+      respond database (run (requestQuery request) bytes)
     | .tooLarge =>
       Reply.tooLarge.toResponse
 
@@ -87,14 +95,15 @@ def Api.unmatched {α : Type u} (t : Api α) : Result .std := fun request =>
   | allow => (Reply.methodNotAllowed (allow.map toString)).toResponse
 
 /-- The handler that answers `t`'s routes, and answers any other request with `Api.unmatched`. -/
-def Api.toHandler (t : Api Endpoint) (maxBody : Nat := defaultMaxBody) : StatelessHandler .std :=
-  (t.map fun endpoint => endpoint.answer maxBody).index.toHandler t.unmatched
+def Api.toHandler (t : Api Endpoint) (maxBody : Nat := defaultMaxBody)
+    (database : Database := .none) : StatelessHandler .std :=
+  (t.map fun endpoint => endpoint.answer maxBody database).index.toHandler t.unmatched
 
 /-- Serves `t` on `addr` until the server shuts down. -/
 def serve (t : Api Endpoint) (addr : Net.SocketAddress) (config : Http.Config := {})
-    (maxBody : Nat := defaultMaxBody) : IO Unit :=
+    (maxBody : Nat := defaultMaxBody) (database : Database := .none) : IO Unit :=
   Async.block do
-    let server ← Server.serve addr (t.toHandler maxBody) config
+    let server ← Server.serve addr (t.toHandler maxBody database) config
     server.waitShutdown
 
 end Espal

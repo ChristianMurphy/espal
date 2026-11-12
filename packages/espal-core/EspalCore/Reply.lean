@@ -113,6 +113,13 @@ def Reply.tooLarge : Reply :=
     "{\"type\":\"/problems/body-too-large\",\"title\":\"The request body is too large\",\"status\":413}".toUTF8,
     []⟩
 
+/-- The `500` reply for a request the server failed to answer, as an RFC 9457 problem. It says
+nothing about the cause. -/
+def Reply.internalError : Reply :=
+  ⟨500, "application/problem+json",
+    "{\"type\":\"/problems/internal\",\"title\":\"The server failed to answer\",\"status\":500}".toUTF8,
+    []⟩
+
 /-- `s` as a JSON string, with its quotes. -/
 def jsonString (s : String) : String :=
   let hex (n : Nat) : Char := if n < 10 then Char.ofNat (0x30 + n) else Char.ofNat (0x61 + n - 10)

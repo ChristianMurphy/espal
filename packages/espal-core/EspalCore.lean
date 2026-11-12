@@ -6,6 +6,8 @@ Authors: Christian Murphy
 module
 
 public import EspalCore.Access
+public import EspalCore.Budget
+public import EspalCore.Costs
 public import EspalCore.Effect
 public import EspalCore.EffectRun
 public import EspalCore.Handler

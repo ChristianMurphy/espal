@@ -6,6 +6,8 @@ Authors: Christian Murphy
 module
 
 public import EspalCore.Access
+public import EspalCore.Budget
+public meta import EspalCore.Budget
 public import EspalCore.Handler
 public import EspalCore.Reply
 public import EspalRoute.Table
@@ -45,6 +47,9 @@ gets no `linkTo` when one of its query arguments has no `LawfulQuery` instance.
 A handler can link to another row of its own table. It takes that row's `LinkTo` or `PathTo`
 instance as an instance argument, and the command fills it when it builds the table.
 `[links_to% h]` writes the `LinkTo` argument for the handler `h`.
+
+A handler that returns a program must send at most 10 database statements. The command checks
+the handler's `@[budget n]` theorem, or proves the bound itself when the handler has none.
 -/
 
 @[expose] public section
@@ -437,6 +442,9 @@ elab_rules : command
           throwErrorAt later.ref m!"{earlier.display} accepts links built for the later \
             route {later.display}.\nThose links would reach the wrong handler. Change one of \
             the two paths."
+    -- Every handler that returns a program has a proved statement budget within the limit.
+    for r in rowsArr do
+      withRef r.ref <| liftTermElabM <| Espal.Budget.ensure r.handler Espal.Budget.defaultLimit
     -- The `PathTo` and `LinkTo` instances come before the table, so a handler in it can take one
     -- as an instance argument and link to another row.
     for r in rowsArr do

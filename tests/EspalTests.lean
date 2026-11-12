@@ -7,6 +7,7 @@ import EspalTests.ApiEffects
 import EspalTests.ApiErrors
 import EspalTests.ApiMethod
 import EspalTests.ApiQuery
+import EspalTests.Budget
 import EspalTests.Effect
 import EspalTests.HttpPath
 import EspalTests.Json
