@@ -7,7 +7,7 @@ Espal builds its query layer on [lean-linq](https://github.com/palladin/lean-lin
 - The query AST, with table variables that the interpreter supplies. Espal chose that representation for its own core, in the [database API note](database-api.md).
 - The SQL compiler for the four dialects, through `toSqlChecked`.
 - The evaluator, which follows SQL's three-valued logic. Differential tests compare each database with it.
-- The graded `Db` type and its `db!` blocks for statement budgets.
+- The graded program type behind `Db`, for statement budgets. Espal has [copied it](#what-espal-copied) and puts its own `@[budget]` attribute on top, in place of `db!` blocks.
 - The parser that turns text results into typed values.
 
 Espal's libpq client, in pipeline mode, runs the compiled SQL. The drivers that ship with lean-linq stay off the request path. Its Postgres driver blocks the calling thread, sends one statement per round trip and reads every row before returning. The SQLite, MySQL and SQL Server drivers get a fresh look when those databases arrive after 0.1.
@@ -35,6 +35,14 @@ These would help, and Espal can add them on top if upstream prefers not to:
 - Check bind parameters against each database's limit, and send Postgres batch lookups as one array with `= ANY($1)`.
 - Name the loop in the error for a query per row. Today it reads `failed to synthesize instance of type class HasBillF`.
 - Make `scanParams` total, since the Postgres and MySQL drivers call it on every query.
+
+## What Espal copied
+
+In November 2026 Espal copied `LeanLinq/Grade.lean` and `LeanLinq/Freer.lean` into `packages/espal-core/EspalCore/Graded`, with the MIT notice. The files come from commit `463e34a`, and each one lists Espal's changes at its top. Handlers needed a program type before a module could import lean-linq, and [lean-linq#6](https://github.com/palladin/lean-linq/issues/6) has no reply yet.
+
+Espal's `Eff` is that type with four operations, which read the clock, draw a random number, log a line and send a statement. It fixes the type's specification index to the trivial one, so `Eff` is an ordinary monad and handlers use Lean's own `do` notation. The `@[budget]` attribute then proves a bound on the statements a handler sends, as a theorem about the program. The roadmap's [statement budget](../../ROADMAP.md#statement-budget) section describes it.
+
+The copy goes away when a module can import lean-linq.
 
 ## What Espal adds
 

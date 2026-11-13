@@ -1,6 +1,6 @@
 # What app code looks like
 
-This note sketches the code an author writes for the two [example apps](../../ROADMAP.md#example-apps), before the `api` macro and the model attribute exist. We wrote the author's side first so the macros and proofs can fit it. Each piece of code names its evidence, using the roadmap's [kinds of evidence](../../ROADMAP.md#kinds-of-evidence), and each label is the target for 0.1. The names are placeholders. The [decisions](#decisions) at the end record what we settled.
+This note sketches the code an author writes for the two [example apps](../../ROADMAP.md#example-apps), before the `api` macro and the model attribute exist. We wrote the author's side first so the macros and proofs can fit it. Each piece of code names its evidence, using the roadmap's [kinds of evidence](../../ROADMAP.md#kinds-of-evidence), and each label is the target for 0.1. The `api` command, `Handler`, `Fails`, `Created`, `Clamp`, links and `@[budget]` now exist in the shape shown here. Models, keys, scopes and the query functions are still sketches, and their names are placeholders. The [decisions](#decisions) at the end record what we settled.
 
 ## What we take from other frameworks
 
@@ -43,15 +43,19 @@ def plaintext (_ : Public) : Handler Text :=
 def json (_ : Public) : Handler Message :=
   return { message := "Hello, World!" }
 
-def db (_ : Public) : Db 1 World NotFound := do
+@[budget]
+def db (_ : Public) : Fails NotFound World := do
   World.get (← randomWorld)
 
-def multipleQueries (_ : Public) (queries : Count) : Db queries (List World) NotFound :=
-  Db.times queries fun _ => do World.get (← randomWorld)
+@[budget]
+def multipleQueries (_ : Public) (queries : Count) : Fails NotFound (List World) :=
+  (List.range queries.val).mapM fun _ => do World.get (← randomWorld)
 
-def updates (_ : Public) (queries : Count) : Db (queries + 1) (List World) NotFound := do
-  let worlds ← Db.times queries fun _ => do World.get (← randomWorld)
-  let worlds ← worlds.mapM fun w => return { w with randomNumber := ← random 1 10000 }
+@[budget]
+def updates (_ : Public) (queries : Count) : Fails NotFound (List World) := do
+  let worlds ← (List.range queries.val).mapM fun _ => do
+    let world ← World.get (← randomWorld)
+    return { world with randomNumber := ← random 1 10000 }
   World.updateAll worlds
   return worlds
 
@@ -59,8 +63,8 @@ api Bench where
   GET "/plaintext" => plaintext
   GET "/json"      => json
   GET "/db"        => db
-  GET "/queries"   => multipleQueries (statements := 500)
-  GET "/updates"   => updates (statements := 501)
+  GET "/queries"   => multipleQueries limit 500
+  GET "/updates"   => updates limit 501
 
 def main : IO Unit := serve Bench
 ```
@@ -69,13 +73,15 @@ The table gives each route a method, a path and a handler. The handler's signatu
 
 - The first argument is the access value.
 - A path capture fills the binder with the same name.
-- A binder whose type has a `QueryParams` instance reads from the query string. `Count` has one, which is how TechEmpower's `queries` parameter arrives.
+- A binder with no capture of its name reads the query parameter of that name, when its type has a `FromQuery` instance. `Count` has one, which is how TechEmpower's `queries` parameter arrives.
 - Any other binder is the body, decoded from JSON. Only POST, PUT and PATCH take a body, so a GET handler with a body binder fails to compile.
-- The result type gives the response, the statement budget and the errors.
+- The result type gives the response and the errors, and `@[budget]` gives the statement budget.
 
-`Db n α ε` counts statements in its type. A `Db a` followed by a `Db b` makes a `Db (a + b)`, and an `if` takes the larger of its two branches. `ε` lists the errors the handler can return, and it defaults to none. Because the count changes from one step to the next, `Db` has no `Monad` instance, so Espal needs its own `do` notation for it. The roadmap's [statement budget](../../ROADMAP.md#statement-budget) section already asks for that, and it is the largest piece of this design that nobody has built yet. `Handler` touches no database, so it is an ordinary monad. A handler that can fail returns `Fails ε α`, such as `Fails SubmitError Receipt`. The errors come first, since Lean finds a monad by dropping a type's last argument.
+A handler returns `Handler α`, a program that can read the clock, draw random numbers, log and send statements. A handler that can fail returns `Fails ε α`, such as `Fails SubmitError Receipt`. The errors come first, since Lean finds a monad by dropping a type's last argument. Both are ordinary monads, so handlers use Lean's own `do` notation.
 
-The roadmap's defaults allow 10 statements per request. `/queries` can send up to 500 and `/updates` up to 501, so the table raises their limits. The macro checks each handler's count against its route's limit, so the table shows every route that goes past the default.
+`@[budget]` counts the statements a handler can send and proves the bound as a theorem named `db.budget`. A step followed by another adds their counts, and an `if` takes the larger of its two branches. A loop costs the bound on its list's length times the cost of one pass. `Count` stops at 500, so `multipleQueries` gets a budget of 500 and `updates` one of 501. `@[budget 1]` states the number instead, and fails when the handler can send more. An earlier draft of this note put the count in the type, as `Db n α ε`. That type has no `Monad` instance, so it needed a `do` notation of its own, and the [decisions](#decisions) record the change.
+
+The roadmap's defaults allow 10 statements per request. `/queries` can send up to 500 and `/updates` up to 501, so the table raises their limits. The command checks each handler's budget against its route's limit, so the table shows every route that goes past the default. `#routes Bench` lists each row with its budget and limit.
 
 `World.get` answers `404` when the row is missing. TechEmpower's table always holds the row, but a total function still needs a result for a key with no row.
 
@@ -88,8 +94,8 @@ The roadmap's defaults allow 10 statements per request. `/queries` can send up t
 | `deriving Json` | Every number Espal writes is a finite double | Proved |
 | `deriving Json` | JavaScript reads each of those numbers back unchanged | Tested in Node |
 | `Int32` | IDs and random numbers travel as JSON numbers | Typed |
-| `Db 1 World NotFound` | The handler sends at most one statement | Proved |
-| `Db queries` | `/queries` sends at most 500 statements, because `Count` stops at 500 | Proved |
+| `@[budget]` on `db` | The handler sends at most one statement | Proved |
+| `@[budget]` on `multipleQueries` | `/queries` sends at most 500 statements, because `Count` stops at 500 | Proved |
 | `World.get` | The SQL text holds no parameter value | Proved |
 | `serve` | Bodies over 1 MiB get `413`, and each request has a deadline | Enforced |
 
@@ -193,23 +199,26 @@ The model attribute generates three types from the field roles, so authors never
 ### The teacher's routes
 
 ```lean
-def listAssessments (s : Scope Teacher) (page : Page) : Db 1 (Paged Assessment.View) :=
+@[budget 1]
+def listAssessments (s : Scope Teacher) (page : Page) : Handler (Paged Assessment.View) :=
   Assessment.list s page
 
-def showAssessment (s : Scope Teacher) (id : Key Assessment) : Db 1 Assessment.View NotFound :=
+@[budget 1]
+def showAssessment (s : Scope Teacher) (id : Key Assessment) : Fails NotFound Assessment.View :=
   Assessment.get s id
 
-def createAssessment (s : Scope Teacher) (body : Assessment.Create) :
-    Db 1 (Created Assessment.View) NotFound := do
+@[budget 1]
+def createAssessment (s : Scope Teacher) [links_to% showAssessment] (body : Assessment.Create) :
+    Fails NotFound (Created Assessment.View) := do
   let a ← Assessment.insert s body
-  return .created (link showAssessment a.id) a
+  return ⟨linkTo showAssessment a.id, a⟩
 ```
 
 A `Scope Teacher` holds the school and the teacher, and only sign-in can build one. `Assessment.list s` and `Assessment.get s` filter on both, so another teacher's assessment answers `404`, the same as one that doesn't exist.
 
 `Assessment.insert s` takes the school and the teacher from `s`. In the same statement, it checks that `body.course` belongs to that teacher and school. A course from anyone else inserts nothing and answers `404`, whether or not the course exists, so the reply reveals nothing about other schools. A plain foreign key wouldn't stop this, because Postgres checks foreign keys [without row-level security](https://www.postgresql.org/docs/current/ddl-rowsecurity.html). Every key in a generated create type goes through the scope this way.
 
-`link showAssessment a.id` builds the `Location` header from the handler and its arguments. A link to a handler that no `api` table lists fails to compile.
+`linkTo showAssessment a.id` builds the `Location` header from the handler and its arguments. `[links_to% showAssessment]` asks the table for that link, and the `api` command fills it in. A table that lists `createAssessment` without `showAssessment` fails to compile.
 
 ### Submissions at the end of an exam
 
@@ -222,16 +231,18 @@ attribute [status 409] SubmitError.closed
 
 deriving instance Problem for SubmitError
 
-def submit (s : Scope Student) (id : Key Assessment) (body : Submission.Create) :
-    Db 2 (Created Submission.View) SubmitError := do
+@[budget 1]
+def showSubmission (s : Scope Student) (id : Key Submission) :
+    Fails NotFound Submission.View :=
+  Submission.get s id
+
+@[budget 2]
+def submit (s : Scope Student) [links_to% showSubmission] (id : Key Assessment)
+    (body : Submission.Create) : Fails SubmitError (Created Submission.View) := do
   let some a ← Assessment.find s id | throw .notFound
   if (← now) > a.closesAt then throw (.closed a.closesAt)
   let sub ← Submission.insert s a body
-  return .created (link showSubmission sub.id) sub
-
-def showSubmission (s : Scope Student) (id : Key Submission) :
-    Db 1 Submission.View NotFound :=
-  Submission.get s id
+  return ⟨linkTo showSubmission sub.id, sub⟩
 ```
 
 `Assessment.find s` reaches an assessment only through the student's enrollments, as the model's `reach` attribute declares. `SubmitError` lists the errors `submit` can return, and the generated TypeScript client gets them as a discriminated union. `now` comes from the interpreter, so a test can set the clock.
@@ -264,7 +275,7 @@ api Grading where
 | `Assessment.insert s` | A new assessment's course belongs to the same teacher and school | Proved over the model, new design |
 | `Assessment.find s` | A student reaches only assessments of their own courses | Proved over the model, new design |
 | `Assessment.Create` | A request can't set the school, the teacher or the ID | Typed |
-| `link showAssessment` | The link reaches that handler with those arguments | Proved |
+| `linkTo showAssessment` | The link reaches that handler with those arguments | Proved |
 | `SubmitError` | `submit` returns only the errors it declares | Typed |
 | `closesAt : Instant` | Code that compares a deadline with a local time fails to compile | Typed |
 | idempotency key | A retry stores the submission once | Proved over the model, Tested |
@@ -274,7 +285,7 @@ The author writes two proofs, `inRange` and `grade_eq_mapResponse`, and both are
 
 ## Messages for common mistakes
 
-Each rejection gets a `#guard_msgs` test with its exact text. Axum and Servant both improved their messages after release. Axum added [`#[debug_handler]`](https://docs.rs/axum-macros/latest/axum_macros/attr.debug_handler.html), and Servant 0.19 added [custom type errors](https://hackage.haskell.org/package/servant/changelog) for partly applied combinators. The messages below are targets, and part of the work is finding out whether a Lean macro can produce each one.
+Each rejection gets a `#guard_msgs` test with its exact text. Axum and Servant both improved their messages after release. Axum added [`#[debug_handler]`](https://docs.rs/axum-macros/latest/axum_macros/attr.debug_handler.html), and Servant 0.19 added [custom type errors](https://hackage.haskell.org/package/servant/changelog) for partly applied combinators. The message for a statement per element is the one Espal prints today. The others are targets, and part of the work is finding out whether a Lean macro can produce each one.
 
 A handler without an access value gets this message.
 
@@ -286,15 +297,16 @@ Add `(_ : Public)` for a public endpoint, or a `Scope` for a signed-in one.
 A query per element of a list gets this one.
 
 ```text
-`World.get` runs once for each element of `ids`, so the number of statements depends on the data.
-Use `World.getMany ids`, which sends one statement, or give the list a maximum length in its type.
+`@[budget]` found no bound for `lookUp`, because the loop over
+  ids
+has no bound on its length. Take at most `n` items with `.take n`, count with a `Clamp`, or give the input a proof field such as `small : items.length ≤ n`.
 ```
 
 A GET handler that reads a body gets this one.
 
 ```text
 handler `listAssessments` reads `filter : Filter` as a JSON body, but a GET request has no body.
-Derive `QueryParams` for `Filter` to read it from the query string.
+Give `Filter` a `FromQuery` instance to read it from the query string.
 ```
 
 A float in an API type gets this one.
@@ -335,7 +347,7 @@ Malformed JSON gets `400`. A body that parses but fails its types or checks gets
 
 ## Decisions
 
-We settled these in October 2026, before any macro work.
+We settled the first six in October 2026, before any macro work, and the seventh in November 2026.
 
 1. A table names handler definitions, and the macro reads their types from their signatures, so a handler stays an ordinary function that tests can call. We passed over the prototype's layout, which declared each endpoint's types in the table and implemented them all in one `match`. We also passed over an attribute such as `@[get "/db"]` on each definition, which spreads routes across files.
 2. Each signature takes an access value, `Public` or a `Scope`, so a new handler can't leave it out. A table that marked a group of routes public once would repeat less, but a route added to that group would be public until review caught it.
@@ -343,3 +355,4 @@ We settled these in October 2026, before any macro work.
 4. Each check is a proof field, which the handler, the decoder and the OpenAPI description share. Code that builds such a value supplies the proof, with `by decide`, `by omega`, or an `if h :` test at run time.
 5. Scores and other counts that need proofs use Espal's `Small`, a `Nat` below 2^53. It travels as a JSON number and has no `+`, so it can't wrap. We passed over `Nat`, which travels as a string, `UInt32`, whose range proof needs two `toNat` lemmas, and `Fin (2^53)`, whose `+` wraps.
 6. The grading theorem states QTI's rule as its own definition, `mapResponse`, and proves that `grade` matches it. That pins the exact score. A theorem that a repeated choice leaves the score unchanged would rule out only one bug.
+7. A handler returns an ordinary monad, `Handler` or `Fails`, and `@[budget]` proves its statement count as a theorem beside it. We passed over `Db n α ε`, which put the count in the type. That type needs its own `do` notation, and each change to a handler's count would change its type.

@@ -107,7 +107,7 @@ Every proved claim relies on these parts:
 
 ### Route report and escape hatches
 
-An audit command prints a report for every route. It marks each guarantee listed under Properties as proved, typed, enforced at runtime, assumed, or bypassed. It also lists what the route's dependencies assume.
+An audit command prints a report for every route. Its first part exists: `#routes` lists a table's rows with each handler's proved statement budget and the row's limit. The full report marks each guarantee listed under Properties as proved, typed, enforced at runtime, assumed, or bypassed. It also lists what the route's dependencies assume.
 
 Escape hatches live under one name, `Espal.escape`, because Lean already uses `unsafe` for something else. Each one takes a reason and lists the guarantees it voids. Raw SQL, for example, voids [injection safety](#no-sql-injection) and the [statement](#statement-budget) and [row](#row-bounds-and-query-cost) budgets for that route, but its body limit still holds. A strict profile rejects every escape hatch in CI.
 
@@ -219,15 +219,16 @@ The check breaks when another service changes the schema while the app runs. It 
 
 ### Statement budget
 
-`runCounting_count` shows that a `DbM n` program sends `n` statements against any database. A query per row fails to type-check, because its count depends on data.
+A handler returns a program, and `Costs x n` says that the program `x` sends at most `n` statements. `Costs.sent_le` shows that running such a program against any world adds at most `n` statements to those already sent. `@[budget n]` on a handler proves `Costs` for it with that number, and `@[budget]` infers the number. The `api` command refuses a handler whose budget is over its route's limit. The limit is 10 unless the row, the table or the option `espal.statementLimit` states another.
 
-The current form has three gaps:
+The inferred number adds up the steps in sequence and takes the larger branch of each `if` or `match`. Two branches in sequence that can never both run still add up, so the number can be higher than any run sends. A loop is counted when its list has a bound on its length, from a `Clamp` count, a `take`, or a proof on the input. A loop over a list without one fails with a message that names those three ways.
 
-- Because the index is exact, both branches of an `if` must send the same number of statements. Real handlers need an upper bound instead.
+The budget has these gaps:
+
 - The count covers statements the app writes. `BEGIN`, `COMMIT`, statement preparation, retries and pool health checks fall outside it, and the docs say so.
 - Pipelining sends several statements per round trip, so round trips can only fall below the count. The count says nothing about what one statement costs; [row bounds and query cost](#row-bounds-and-query-cost) covers that.
-
-The prototype found two more problems. A budgeted program isn't a monad, so code chains `.bind` calls instead of using `do` notation. A query per row fails with `failed to synthesize instance of type class Monad (DbM 1)`, which never mentions the loop. Before 0.1, budgets need a `do`-notation form and a custom error message.
+- Only loops over a `List` are counted so far. A statement for each row of a result has no bound until queries carry their row limit.
+- `Costs.sent_le` covers `Eff.eval`, the interpreter that tests and proofs use. No theorem ties it to the interpreter that serves requests, which doesn't count statements at run time yet.
 
 ### Row bounds and query cost
 
@@ -249,7 +250,7 @@ For 0.1 we ship a deadline per request, checked at every effect step (Enforced).
 
 ### Stateless handlers
 
-A handler returns its effects as data instead of running them, and it has no `IO` access. Espal's interpreter runs the effects. Between requests it keeps only connection pools. Nothing here exists yet. We plan to prove over a model of the interpreter that the response depends on three inputs. They are the request, the database state, and what the declared effects return. Send the same request to another process with the same inputs, and it returns the same response.
+A handler returns its effects as data instead of running them, and it has no `IO` access. Espal's interpreter runs the effects. Between requests it keeps only connection pools. `Eff` in `espal-core` is that program type, and `Eff.eval` runs a program against a world value. The world holds the clock, the random numbers and the rows the database returns. `eval` is a pure function, so the same handler arguments and world give the same reply. No theorem ties `eval` to the interpreter that serves requests yet. We plan to prove over a model of that interpreter that the response depends on three inputs. They are the request, the database state, and what the declared effects return. Send the same request to another process with the same inputs, and it returns the same response.
 
 App code can still reach process-global state. An `initialize` declaration can hold an `IO.Ref`, and `unsafeBaseIO`, `@[extern]` and `implemented_by` open other paths. An in-process cache, rate limiter or session store breaks the property too. The [route report](#route-report-and-escape-hatches) lists every such declaration that a handler can reach.
 
@@ -421,10 +422,10 @@ We finished this milestone. It picked the HTTP layer, the Postgres client and th
   - Both recovered on their own when Postgres killed their connections or restarted, in about 0.1 and 2.3 seconds, with no hung requests.
   - The libpq server links 24 shared libraries at run time, among them OpenSSL, Kerberos and LDAP.
 - **Dependency spikes.** We build each candidate on Espal's toolchain, measure it against what Espal needs, and write down whether we keep or replace it. The candidates pin Lean versions from 4.33 to 4.35 today.
-  - lean-linq (MIT) as the query layer (done). Espal builds on its core with its own Postgres client, and sends changes upstream first. It passed its tests on Lean 4.35.0 and 4.36.0-rc1, and its budgets close most gaps in the [statement budget](#statement-budget). A module can't import it yet, its warnings fail `--wfail`, and its build needs all four client libraries. Moving its MySQL driver to MariaDB Connector/C took four changed lines. The [decision note](docs/design/lean-linq.md) lists what has to change upstream.
-  - lean-routing (Apache 2.0) as the router (done). Espal builds its routes on it as it is. On Lean 4.35.0 and 4.36.0-rc1 it built with no warnings and passed its tests. Espal adds the link round-trip proof, a reachability check, and a redirect to each resource's one URL. The [decision note](docs/design/lean-routing.md) has the details.
+  - lean-linq (MIT) as the query layer (done). Espal builds on its core with its own Postgres client, and sends changes upstream first. It passed its tests on Lean 4.35.0 and 4.36.0-rc1, and its graded program type gives budgets an upper bound. Espal has since copied the two files of that type, with their MIT notice, and builds [statement budgets](#statement-budget) on them. A module can't import the rest yet, its warnings fail `--wfail`, and its build needs all four client libraries. Moving its MySQL driver to MariaDB Connector/C took four changed lines. The [decision note](docs/design/lean-linq.md) lists what has to change upstream.
+  - lean-routing (Apache 2.0) as the router (done). Espal builds its routes on it, with one change that it has offered upstream. On Lean 4.35.0 and 4.36.0-rc1 it built with no warnings and passed its tests. Espal adds the link round-trip proof, a reachability check, and a redirect to each resource's one URL. The [decision note](docs/design/lean-routing.md) has the details.
   - LeanIO (MIT) for streamed multipart uploads, ranges and ETags (done). Espal writes its own after 0.1 ships, when uploads and HTTP caching arrive. LeanIO's multipart parser loses the start of a field that spans two chunks, and its executables are 120 MB. The [decision note](docs/design/leanio.md) has the details.
-  - cedar-lean (Apache 2.0) as the permission engine (done). Espal checks permissions with its authorizer and sends changes upstream first. Its proofs cover [every endpoint checks permission](#every-endpoint-checks-permission), and a check took 6.7 µs. A program that uses it is 119 MB until Batteries and cedar-lean keep the Lean package out of their run-time imports. The [decision note](docs/design/cedar-lean.md) has the details.
+  - cedar-lean (Apache 2.0) as the permission engine (done). Espal checks permissions with its authorizer and sends changes upstream first. Its proofs cover [every endpoint checks permission](#every-endpoint-checks-permission), and a check took 6.7 µs. A program that used it was 119 MB, because Batteries and cedar-lean imported the Lean package at run time. Both have merged changes for that, and nobody has measured the result yet. The [decision note](docs/design/cedar-lean.md) has the details.
 - **Exit.** Numbers in `bench/results/` with the hardware recorded, a written decision for HTTP, Postgres and each dependency, and fixed targets in the table below.
 - **Failure.** The spike may show that no Lean server on this runtime gets near the throughput target. We then write our own server, which adds to the work in [packages, endpoints and the JSON API](#packages-endpoints-and-the-json-api), or restate the target. Several processes per machine stay part of the design either way, and statelessness makes them cheap.
 
@@ -433,10 +434,10 @@ We finished this milestone. It picked the HTTP layer, the Postgres client and th
 ### Packages, endpoints and the JSON API
 
 - Split the repository into the packages listed under Scope, with the `espal` package at the root (done).
-- Build the `api` macro on [lean-routing](docs/design/lean-routing.md)'s routes, with the reachability check on top. The route codec moves to bytes, and helpers become private.
-- An endpoint declares its method, path, parameters, body, response, typed errors, permission and statement budget. The [app code note](docs/design/app-code.md) sketches the endpoints of both example apps.
+- Build the `api` macro on [lean-routing](docs/design/lean-routing.md)'s routes, with the reachability check on top (done). The route codec moves to bytes, and helpers become private.
+- An endpoint declares its method, path, parameters, body, response, typed errors, permission and statement budget (done, with `Public` as the only permission so far). The [app code note](docs/design/app-code.md) sketches the endpoints of both example apps.
 - JSON on [lean-json](docs/design/lean-json.md), which imports only `Std`. `Lean.Data.Json` makes a server binary 120 MB, well over the 10 MB target. A `LawfulJson` deriving handler generates the round-trip proof that [client and server agreement](#client-and-server-agree) needs, and [streaming decoders](#streaming-decoders-agree-with-whole-body-decoders) come with the chunk-split proof.
-- Errors use problem details. Malformed JSON returns `400`. A body that fails its types or checks returns `422`, which names every failing field.
+- Errors use problem details (done). Malformed JSON returns `400`. A body that fails its types or checks returns `422`, which names every failing field.
 - The default limits, memory bounds per request, `413` for oversized bodies, and the [memory pool](#memory-per-request-stays-within-a-declared-bound). Espal raises Std.Http's limit of 100 requests per keep-alive connection, which forces a proxy to reconnect often.
 - The route report and `Espal.escape`. The report includes what the earlier app audit found: `unsafe`, `extern`, `implemented_by`, `initialize` and extra axioms that handlers can reach, as [stateless handlers](#stateless-handlers) describes.
 - The OpenAPI 3.2.1 description.
@@ -446,7 +447,7 @@ We finished this milestone. It picked the HTTP layer, the Postgres client and th
 ### Query layer, models and Postgres
 
 - The query core from [lean-linq](docs/design/lean-linq.md), with table variables that the interpreter supplies. Models declared with an attribute, the builder, and query syntax in `do` notation sit on top.
-- Statement budgets with upper bounds and `do` notation. The proofs for [injection](#no-sql-injection), [tenant isolation](#tenant-isolation), [statement budgets](#statement-budget) and [row bounds](#row-bounds-and-query-cost) carry over, with batch lookups through `= ANY($1)`.
+- Statement budgets with upper bounds and `do` notation (done, as `@[budget]`). The proofs for [injection](#no-sql-injection), [tenant isolation](#tenant-isolation), [statement budgets](#statement-budget) and [row bounds](#row-bounds-and-query-cost) carry over, with batch lookups through `= ANY($1)`.
 - Collections and safe writes from the defaults.
 - The libpq client behind Espal's own client interface, with pipelining, transactions, prepared statements, and single-row mode for streamed results. Its pool waits for a reconnecting connection, where the spike's pool failed requests at once.
 - A figure for the database failover target in the [performance targets](#performance-targets), once the pool waits for a reconnecting connection.
@@ -598,11 +599,11 @@ These came out of the planning discussion in October 2026.
 - **Defaults.** Collections, problem details, safe writes, and an OpenAPI 3.2.1 description.
 - **Streaming.** Typed JSON in 0.1, MessagePack later.
 - **Route report.** One per route, with named escape hatches and a strict profile.
-- **App code.** A table names handler definitions, and each signature gives the handler's access, inputs, response, errors and statement budget. Decoders reject unknown keys, and each check is a proof field. The [app code note](docs/design/app-code.md) has the details.
+- **App code.** A table names handler definitions, and each signature gives the handler's access, inputs, response and errors. A `@[budget]` attribute proves its statement budget. Decoders reject unknown keys, and each check is a proof field. The [app code note](docs/design/app-code.md) has the details.
 - **Contracts.** One prototype with `vcgen` in the query layer milestone before committing.
 - **Candidate dependencies.** lean-linq, lean-routing, LeanIO and cedar-lean, each evaluated during the spikes, and lean-json after them.
-- **Query core.** lean-linq's core, run by Espal's own Postgres client. Changes go upstream first, and a copy with its MIT notice is the fallback.
-- **Router.** lean-routing as it is, with Espal's endpoints, reachability check and canonical-path redirect on top. A copy with its Apache 2.0 notice is the fallback.
+- **Query core.** lean-linq's core, run by Espal's own Postgres client. Changes go upstream first, and a copy with its MIT notice is the fallback. Espal already copies the program type that handlers return.
+- **Router.** lean-routing, pinned to a fork until it takes the universe change, with Espal's endpoints, reachability check and canonical-path redirect on top. A copy with its Apache 2.0 notice is the fallback.
 - **Permission engine.** cedar-lean's authorizer, with changes upstream first. A copy of `Cedar.Spec` with its Apache 2.0 notice is the fallback.
 - **Uploads, ranges and ETags.** Espal's own, with a chunk-split proof for the multipart parser. LeanIO stays out.
 - **JSON.** lean-json, with a round-trip class whose instances a deriving handler proves. Changes go upstream first, and a copy with its Apache 2.0 notice is the fallback.
