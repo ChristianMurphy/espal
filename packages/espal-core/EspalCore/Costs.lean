@@ -160,4 +160,79 @@ theorem costsT_dite {ε α : Type} (c : Prop) [Decidable c] (t : c → ExceptT �
   · simpa [h] using Costs.mono _ (ht h) (Nat.le_max_left a b)
   · simpa [h] using Costs.mono _ (he h) (Nat.le_max_right a b)
 
+/-! ## Loops
+
+A loop costs at most the length of its list times the most one pass can send. `Eff` has no
+`LawfulMonad` instance, so these follow the definitions of `List.mapM` and `forIn` directly. -/
+
+theorem costs_mapM_loop {α β : Type} (f : α → Eff β) {j : Nat} (hf : ∀ a, Costs (f a) j) :
+    ∀ (xs : List α) (acc : List β), Costs (List.mapM.loop f xs acc) (xs.length * j)
+  | [], _ => by simpa [List.mapM.loop] using costs_pure _ _
+  | a :: as, acc => by
+    have step :=
+      costs_bind (f a) (fun b => List.mapM.loop f as (b :: acc)) (hf a) fun b =>
+        costs_mapM_loop f hf as (b :: acc)
+    have split : (a :: as).length * j = j + as.length * j := by simp [Nat.add_mul, Nat.add_comm]
+    rw [split]
+    exact step
+
+/-- Mapping a program over a list costs at most the list's length times one call. -/
+theorem costs_mapM {α β : Type} (f : α → Eff β) (xs : List α) {j : Nat} (hf : ∀ a, Costs (f a) j) :
+    Costs (xs.mapM f) (xs.length * j) :=
+  costs_mapM_loop f hf xs []
+
+/-- A `for` loop over a list costs at most the list's length times one pass, whether or not it
+stops early. -/
+theorem costs_forIn {α σ : Type} (xs : List α) (init : σ) (f : α → σ → Eff (ForInStep σ)) {j : Nat}
+    (hf : ∀ a s, Costs (f a s) j) : Costs (forIn xs init f) (xs.length * j) := by
+  induction xs generalizing init with
+  | nil => simpa using costs_pure _ _
+  | cons a as ih =>
+    rw [List.forIn_cons]
+    have split : (a :: as).length * j = j + as.length * j := by simp [Nat.add_mul, Nat.add_comm]
+    rw [split]
+    refine costs_bind _ _ (hf a init) fun step => ?_
+    cases step with
+    | done s => exact costs_pure _ _
+    | yield s => exact ih s
+
+theorem costsT_mapM_loop {ε α β : Type} (f : α → ExceptT ε Eff β) {j : Nat}
+    (hf : ∀ a, Costs (f a).run j) :
+    ∀ (xs : List α) (acc : List β), Costs (List.mapM.loop f xs acc).run (xs.length * j)
+  | [], _ => by simpa [List.mapM.loop] using costsT_pure _
+  | a :: as, acc => by
+    have step :=
+      costsT_bind (f a) (fun b => List.mapM.loop f as (b :: acc)) (hf a) fun b =>
+        costsT_mapM_loop f hf as (b :: acc)
+    have split : (a :: as).length * j = j + as.length * j := by simp [Nat.add_mul, Nat.add_comm]
+    rw [split]
+    exact step
+
+theorem costsT_mapM {ε α β : Type} (f : α → ExceptT ε Eff β) (xs : List α) {j : Nat}
+    (hf : ∀ a, Costs (f a).run j) : Costs (xs.mapM f).run (xs.length * j) :=
+  costsT_mapM_loop f hf xs []
+
+theorem costsT_forIn {ε α σ : Type} (xs : List α) (init : σ)
+    (f : α → σ → ExceptT ε Eff (ForInStep σ)) {j : Nat} (hf : ∀ a s, Costs (f a s).run j) :
+    Costs (forIn xs init f).run (xs.length * j) := by
+  induction xs generalizing init with
+  | nil => simpa using costsT_pure _
+  | cons a as ih =>
+    rw [List.forIn_cons]
+    have split : (a :: as).length * j = j + as.length * j := by simp [Nat.add_mul, Nat.add_comm]
+    rw [split]
+    refine costsT_bind _ _ (hf a init) fun step => ?_
+    cases step with
+    | done s => exact Costs.mono _ (costsT_pure s) (Nat.zero_le _)
+    | yield s => exact ih s
+
+/-! A loop's bound needs a bound on its list's length. These give one for the lists a handler can
+bound. -/
+
+theorem length_range_le {n limit : Nat} (h : n ≤ limit) : (List.range n).length ≤ limit := by
+  simpa using h
+
+theorem length_map_le {α β : Type} (f : α → β) {xs : List α} {limit : Nat} (h : xs.length ≤ limit) :
+    (xs.map f).length ≤ limit := by simpa using h
+
 end Espal

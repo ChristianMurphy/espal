@@ -323,3 +323,25 @@ info: Espal.Eff.eval_pure {α : Type} (a : α) (world : Espal.World) : (pure a).
 -/
 #guard_msgs in
 #check Espal.Eff.eval_pure
+
+/--
+info: Espal.costs_mapM {α β : Type} (f : α → Espal.Eff β) (xs : List α) {j : Nat} (hf : ∀ (a : α), Espal.Costs (f a) j) :
+  Espal.Costs (List.mapM f xs) (xs.length * j)
+-/
+#guard_msgs in
+#check Espal.costs_mapM
+
+/-- info: 'Espal.costs_mapM' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.costs_mapM
+
+/--
+info: Espal.costs_forIn {α σ : Type} (xs : List α) (init : σ) (f : α → σ → Espal.Eff (ForInStep σ)) {j : Nat}
+  (hf : ∀ (a : α) (s : σ), Espal.Costs (f a s) j) : Espal.Costs (forIn xs init f) (xs.length * j)
+-/
+#guard_msgs in
+#check Espal.costs_forIn
+
+/-- info: 'Espal.costs_forIn' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.costs_forIn
