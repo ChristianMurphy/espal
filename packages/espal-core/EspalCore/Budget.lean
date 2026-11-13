@@ -7,6 +7,7 @@ module
 
 public import EspalCore.Costs
 public import EspalCore.Handler
+public import EspalCore.ReadOnly
 public meta import Lean.Elab.Command
 public meta import Lean.Elab.Tactic
 
@@ -31,6 +32,9 @@ a `Clamp` value, and a proof such as `small : items.length ≤ n`, in scope or a
 structure that holds the list. A loop over any other list is an error.
 
 The option `espal.statementLimit` is the limit an `api` table applies to a row that states none.
+
+The same walk proves `ReadOnly` for a handler behind a `GET` row, as the theorem `h.readOnly`. It
+fails at a `statement`, and a loop needs no bound for it.
 -/
 
 public section
@@ -75,10 +79,54 @@ meta def underlying (layer : Layer) (program : Expr) : MetaM Expr :=
 meta def costsType (layer : Layer) (program : Expr) (n : Expr) : MetaM Expr := do
   mkAppM ``Espal.Costs #[← underlying layer program, n]
 
+/-- What the walk proves about a program. -/
+meta inductive Claim where
+  /-- `Costs`, with the most statements the program can send. -/
+  | costs
+  /-- `ReadOnly`, that the program never asks for `statement`. -/
+  | reads
+  deriving BEq
+
+/-- The statement the walk proves about `program`. The bound matters only for `Claim.costs`. -/
+meta def Claim.type (claim : Claim) (layer : Layer) (program : Expr) (bound : Nat) : MetaM Expr :=
+  match claim with
+  | .costs => costsType layer program (mkNatLit bound)
+  | .reads => do
+    mkAppM ``Espal.ReadOnly #[← underlying layer program]
+
+/-- The name of the theorem that states a claim about a whole handler. -/
+meta def Claim.suffix : Claim → Name
+  | .costs => `budget
+  | .reads => `readOnly
+
+/-- The lemma for one way to build a program, such as `bind`, at this claim and layer. -/
+meta def Claim.lemma (claim : Claim) (layer : Layer) (step : String) : Name :=
+  let stem :=
+    match claim, layer with
+    | .costs, .eff => "costs_"
+    | .costs, .failing => "costsT_"
+    | .reads, .eff => "readOnly_"
+    | .reads, .failing => "readOnlyT_"
+  `Espal ++ Name.mkSimple (stem ++ step)
+
+/-- The implicit numbers a `Costs` lemma takes before its proofs, which a `ReadOnly` lemma lacks. -/
+meta def Claim.numbers (claim : Claim) (count : Nat) : Array (Option Expr) :=
+  match claim with
+  | .costs => Array.replicate count none
+  | .reads => #[]
+
+/-- Raises a proved bound to `bound`, which a `ReadOnly` proof doesn't need. -/
+meta def Claim.raise (claim : Claim) (proof : Expr) (fits : Expr) : MetaM Expr :=
+  match claim with
+  | .costs => mkAppOptM ``Espal.Costs.mono #[none, none, none, none, none, proof, fits]
+  | .reads => pure proof
+
 /-- The budget that `declName.budget` states, if the theorem exists. -/
-meta def stated? (declName : Name) : MetaM (Option Nat) := do
-  let some proved := (← getEnv).find? (declName ++ `budget)
+meta def stated? (declName : Name) (claim : Claim := .costs) : MetaM (Option Nat) := do
+  let some proved := (← getEnv).find? (declName ++ claim.suffix)
     | return none
+  if claim == .reads then
+    return some 0
   forallTelescope proved.type fun _ body => do
       let body ← instantiateMVars body
       return body.getAppArgs.back?.bind fun n => n.rawNatLit?.orElse fun _ => n.nat?
@@ -182,20 +230,22 @@ meta def unbounded {α : Type} (xs : Expr) : MetaM α :=
     `small : items.length ≤ n`."
 
 /-- The most statements `program` can send, with a proof of `Costs (underlying program) bound`.
-`self?` is the handler being walked, whose own `budget` theorem must not be used. `fuel` bounds
-how many definitions the walk unfolds in a row. -/
-meta def walk (self? : Option Name) (program : Expr) : (fuel : Nat) → MetaM (Nat × Expr)
+With `Claim.reads` the proof is of `ReadOnly (underlying program)`, and the number is zero.
+`self?` is the handler being walked, whose own theorem must not be used. `fuel` bounds how many
+definitions the walk unfolds in a row. -/
+meta def walk (claim : Claim) (self? : Option Name) (program : Expr) :
+    (fuel : Nat) → MetaM (Nat × Expr)
   | 0 => lost program
   | fuel + 1 => do
     let program := (← instantiateMVars program).headBeta.consumeMData
     if let .letE _ _ value body _ := program then
-      return ← walk self? (body.instantiate1 value) fuel
+      return ← walk claim self? (body.instantiate1 value) fuel
     let programType ← whnfR (← inferType program)
     let some layer ← layerOf? programType | lost program
     -- The error type of a failing program, which the lemmas about one can't infer.
     let errorType := programType.getAppArgs[0]?
     let known (proof : Expr) (bound : Nat) : MetaM (Nat × Expr) := do
-      return (bound, ← mkExpectedTypeHint proof (← costsType layer program (mkNatLit bound)))
+      return (bound, ← mkExpectedTypeHint proof (← claim.type layer program bound))
     let fn := program.getAppFn
     let args := program.getAppArgs
     let under (k : Expr) (next : Expr → MetaM (Nat × Expr)) : MetaM (Nat × Expr) := do
@@ -206,22 +256,24 @@ meta def walk (self? : Option Name) (program : Expr) : (fuel : Nat) → MetaM (N
           return (bound, ← mkLambdaFVars #[a] proof)
     match fn.constName?, args with
     | some ``Pure.pure, #[_, _, _, a] =>
-      match layer with
-      | .eff =>
+      match claim, layer with
+      | .costs, .eff =>
         known (← mkAppM ``Espal.costs_pure #[a, mkNatLit 0]) 0
-      | .failing =>
-        known (← mkAppOptM ``Espal.costsT_pure #[errorType, none, a]) 0
+      | .reads, .eff =>
+        known (← mkAppM ``Espal.readOnly_pure #[a]) 0
+      | _, .failing =>
+        known (← mkAppOptM (claim.lemma layer "pure") #[errorType, none, a]) 0
     | some ``Bind.bind, #[_, _, _, _, x, k] =>
-      let (m, hx) ← walk self? x fuel
-      let (j, hk) ← under k fun body => walk self? body fuel
-      let lemma := if layer == .eff then ``Espal.costs_bind else ``Espal.costsT_bind
-      return (m + j, ← mkAppM lemma #[x, k, hx, hk])
+      let (m, hx) ← walk claim self? x fuel
+      let (j, hk) ← under k fun body => walk claim self? body fuel
+      return (m + j, ← mkAppM (claim.lemma layer "bind") #[x, k, hx, hk])
     | some ``List.mapM, #[_, _, _, _, f, xs] =>
       -- A loop costs the bound on its list's length times the most one pass can send.
-      let (j, hf) ← under f fun body => walk self? body fuel
+      let (j, hf) ← under f fun body => walk claim self? body fuel
+      let looped ← mkAppM (claim.lemma layer "mapM") #[f, xs, hf]
+      if claim == .reads then
+        return ← known looped 0
       let some (limit, fits) ← lengthBound? xs 16 | unbounded xs
-      let lemma := if layer == .eff then ``Espal.costs_mapM else ``Espal.costsT_mapM
-      let looped ← mkAppM lemma #[f, xs, hf]
       let widened ← mkAppM ``Nat.mul_le_mul_right #[mkNatLit j, fits]
       known (← mkAppOptM ``Espal.Costs.mono #[none, none, none, none, none, looped, widened])
           (limit * j)
@@ -233,72 +285,82 @@ meta def walk (self? : Option Name) (program : Expr) : (fuel : Nat) → MetaM (N
             let some (.forallE name domain _ _) := some (← whnf (← inferType partial_))
               | lost program
             withLocalDeclD name domain fun state => do
-                let (bound, proof) ← walk self? (mkApp partial_ state).headBeta fuel
+                let (bound, proof) ← walk claim self? (mkApp partial_ state).headBeta fuel
                 return (bound, ← mkLambdaFVars #[state] proof)
+      let looped ← mkAppM (claim.lemma layer "forIn") #[xs, init, f, hf]
+      if claim == .reads then
+        return ← known looped 0
       let some (limit, fits) ← lengthBound? xs 16 | unbounded xs
-      let lemma := if layer == .eff then ``Espal.costs_forIn else ``Espal.costsT_forIn
-      let looped ← mkAppM lemma #[xs, init, f, hf]
       let widened ← mkAppM ``Nat.mul_le_mul_right #[mkNatLit j, fits]
       known (← mkAppOptM ``Espal.Costs.mono #[none, none, none, none, none, looped, widened])
           (limit * j)
     | some ``Functor.map, #[_, _, _, _, f, x] =>
-      let (m, hx) ← walk self? x fuel
-      let lemma := if layer == .eff then ``Espal.costs_map else ``Espal.costsT_map
-      return (m, ← mkAppM lemma #[f, x, hx])
+      let (m, hx) ← walk claim self? x fuel
+      return (m, ← mkAppM (claim.lemma layer "map") #[f, x, hx])
     | some ``ite, #[_, c, inst, t, e] =>
-      let (a, ht) ← walk self? t fuel
-      let (b, he) ← walk self? e fuel
-      let lemma := if layer == .eff then ``Espal.costs_ite else ``Espal.costsT_ite
+      let (a, ht) ← walk claim self? t fuel
+      let (b, he) ← walk claim self? e fuel
       let implicit : Array (Option Expr) := if layer == .eff then #[none] else #[none, none]
       return (max a b,
           ←
-            mkAppOptM lemma
-                (implicit ++ #[some c, some inst, some t, some e, none, none, some ht, some he]))
+            mkAppOptM (claim.lemma layer "ite")
+                (implicit ++ #[some c, some inst, some t, some e] ++ claim.numbers 2 ++
+                  #[some ht, some he]))
     | some ``dite, #[_, c, inst, t, e] =>
-      let (a, ht) ← under t fun body => walk self? body fuel
-      let (b, he) ← under e fun body => walk self? body fuel
-      let lemma := if layer == .eff then ``Espal.costs_dite else ``Espal.costsT_dite
+      let (a, ht) ← under t fun body => walk claim self? body fuel
+      let (b, he) ← under e fun body => walk claim self? body fuel
       let implicit : Array (Option Expr) := if layer == .eff then #[none] else #[none, none]
       return (max a b,
           ←
-            mkAppOptM lemma
-                (implicit ++ #[some c, some inst, some t, some e, none, none, some ht, some he]))
+            mkAppOptM (claim.lemma layer "dite")
+                (implicit ++ #[some c, some inst, some t, some e] ++ claim.numbers 2 ++
+                  #[some ht, some he]))
     | some name, _ =>
       if name == ``Espal.now && args.isEmpty then
-        return ← known (mkConst ``Espal.costs_now) 0
+        return ← known (mkConst (claim.lemma .eff "now")) 0
       if name == ``Espal.random && args.size == 2 then
-        return ← known (← mkAppM ``Espal.costs_random args) 0
+        return ← known (← mkAppM (claim.lemma .eff "random") args) 0
       if name == ``Espal.log && args.size == 1 then
-        return ← known (← mkAppM ``Espal.costs_log args) 0
+        return ← known (← mkAppM (claim.lemma .eff "log") args) 0
+      if name == ``Espal.query && args.size == 1 then
+        return ← known (← mkAppM (claim.lemma .eff "query") args) (if claim == .costs then 1 else 0)
       if name == ``Espal.statement && args.size == 1 then
+        if claim == .reads then
+          throwError m!"it sends{indentExpr program}\nwhich may write"
         return ← known (← mkAppM ``Espal.costs_statement args) 1
       if layer == .failing && throwNames.contains name then
         let some e := args.back?
           | lost program
         return ←
-            known (← mkAppOptM ``Espal.costsT_throw #[errorType, programType.getAppArgs[2]?, e]) 0
+            known
+                (←
+                  mkAppOptM (claim.lemma .failing "throw")
+                      #[errorType, programType.getAppArgs[2]?, e])
+                0
       if layer == .failing && liftNames.contains name then
         let some y := args.back?
           | lost program
-        let (m, hy) ← walk self? y fuel
-        let proof ← mkAppOptM ``Espal.costsT_lift #[errorType, none, y, none, hy]
+        let (m, hy) ← walk claim self? y fuel
+        let proof ←
+          mkAppOptM (claim.lemma .failing "lift")
+              (#[errorType, none, some y] ++ claim.numbers 1 ++ #[some hy])
         return ← known proof m
       if some name != self? then
-        if let some bound← stated? name then
+        if let some bound← stated? name claim then
           let levels :=
             match fn with
             | .const _ levels => levels
             | _ => []
-          let proof := mkAppN (mkConst (name ++ `budget) levels) args
+          let proof := mkAppN (mkConst (name ++ claim.suffix) levels) args
           return ← known proof bound
       if let some matcher← matchMatcherApp? program then
         -- A `match` costs the dearest of its alternatives. The proof splits the match and closes
         -- each case with the walk of that alternative.
         let mut bound := 0
         for alt in matcher.alts do
-          let (cost, _) ← lambdaTelescope alt fun _ body => walk self? body fuel
+          let (cost, _) ← lambdaTelescope alt fun _ body => walk claim self? body fuel
           bound := max bound cost
-        let goal ← mkFreshExprSyntheticOpaqueMVar (← costsType layer program (mkNatLit bound))
+        let goal ← mkFreshExprSyntheticOpaqueMVar (← claim.type layer program bound)
         let .mvar goalId := goal
           | lost program
         let cases ← (Tactic.run goalId (Tactic.evalTactic (← `(tactic| split)))).run'
@@ -311,20 +373,21 @@ meta def walk (self? : Option Name) (program : Expr) : (fuel : Nat) → MetaM (N
                 if caseProgram.isAppOf ``ExceptT.run then
                   caseProgram.getAppArgs.back?.getD caseProgram
                 else caseProgram
-              let (cost, proof) ← walk self? inner fuel
+              let (cost, proof) ← walk claim self? inner fuel
               let fits ← mkDecideProof (← mkAppM ``LE.le #[mkNatLit cost, mkNatLit bound])
-              case.assign
-                  (← mkAppOptM ``Espal.Costs.mono #[none, none, none, none, none, proof, fits])
+              case.assign (← claim.raise proof fits)
         return (bound, ← instantiateMVars goal)
       let some unfolded ← unfoldDefinition? program | lost program
       -- A failure inside another definition is reported at the call, as the handler wrote it.
       let (bound, proof) ←
         if some name == self? then
-          walk self? unfolded fuel
+          walk claim self? unfolded fuel
         else
           try
-            walk self? unfolded fuel
-          catch _ =>
+            walk claim self? unfolded fuel
+          catch error =>
+            if claim == .reads then
+              throw error
             lost program
       known proof bound
     | none, _ =>
@@ -348,7 +411,7 @@ meta def measure (declName : Name) (pinned? : Option Nat) : MetaM (Option (Nat �
       let call := mkAppN (mkConst declName (info.levelParams.map mkLevelParam)) xs
       let (bound, proof) ←
         try
-          walk (some declName) call walkFuel
+          walk .costs (some declName) call walkFuel
         catch error =>
           throwError m!"`@[budget]` found no bound for `{privateToUserName declName}`, because \
           {error.toMessageData}"
@@ -397,6 +460,30 @@ meta def ensure (declName : Name) (limit : Nat) : MetaM Unit := do
     throwError m!"`{privateToUserName declName}` may send {statements budget}, and this route's \
       limit is {limit}.\nRaise the limit on the row with `limit {budget}`, or send fewer."
 
+/-- Makes sure the handler `declName` only reads, when its result is a program. It uses the
+handler's `readOnly` theorem if there is one, and proves one otherwise. A `GET` row calls this. -/
+meta def ensureReads (declName : Name) : MetaM Unit := do
+  let info ← getConstInfo declName
+  if ((← getEnv).find? (declName ++ `readOnly)).isSome then
+    return
+  let proved ←
+    forallTelescope info.type fun xs result => do
+        let some layer ← layerOf? result | return none
+        let call := mkAppN (mkConst declName (info.levelParams.map mkLevelParam)) xs
+        let (_, proof) ←
+          try
+            walk .reads (some declName) call walkFuel
+          catch error =>
+            throwError m!"`{privateToUserName declName}` answers a `GET` request, which must leave \
+            the database as it was, and {error.toMessageData}.\nRead with `query`, or give the \
+            route another method."
+        let type ← mkForallFVars xs (← Claim.reads.type layer call 0)
+        let value ← mkLambdaFVars xs proof
+        return some (← instantiateMVars type, ← instantiateMVars value)
+  let some (type, value) := proved
+    | return
+  addDecl (.thmDecl { name := declName ++ `readOnly, levelParams := info.levelParams, type, value })
+
 /-- The `budget` tactic. -/
 @[tactic budgetTactic]
 public meta def evalBudget : Tactic.Tactic := fun _ => do
@@ -408,7 +495,7 @@ public meta def evalBudget : Tactic.Tactic := fun _ => do
         | throwError "`budget` proves a goal of the form `Costs x n`."
       let inner :=
         if program.isAppOf ``ExceptT.run then program.getAppArgs.back?.getD program else program
-      let (bound, proof) ← walk none inner walkFuel
+      let (bound, proof) ← walk .costs none inner walkFuel
       let some n := (← instantiateMVars wanted).nat?.orElse fun _ => wanted.rawNatLit?
         | throwError "`budget` needs the bound in the goal to be a number."
       if bound > n then

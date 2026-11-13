@@ -79,13 +79,22 @@ inductive Op : Type → Type 1 where
   | random (lo hi : Nat) : Op Nat
   /-- Writes one line to the log. -/
   | log (line : String) : Op Unit
-  /-- Sends one statement to the database. -/
+  /-- Sends one statement that only reads to the database. -/
+  | query (s : Statement) : Op Rows
+  /-- Sends one statement that may write to the database. -/
   | statement (s : Statement) : Op Rows
 
-/-- What an operation costs. A statement costs one, and the others cost nothing. -/
+/-- What an operation costs. A statement costs one, whether it reads or writes, and the others
+cost nothing. -/
 def Op.cost : {β : Type} → Op β → Nat
+  | _, .query _ => 1
   | _, .statement _ => 1
   | _, _ => 0
+
+/-- Whether an operation leaves the database as it was. Only `statement` may change it. -/
+def Op.reads : {β : Type} → Op β → Bool
+  | _, .statement _ => false
+  | _, _ => true
 
 /-- The spec of every operation is empty, since `Costs` holds the bound. -/
 def opWp : EffWp Op := fun _ => Wp.triv _
@@ -114,7 +123,12 @@ def random (lo hi : Nat) : Eff Nat :=
 def log (line : String) : Eff Unit :=
   .lift (.log line)
 
-/-- Sends `s` to the database and returns its rows. -/
+/-- Sends `s` to the database and returns its rows. `s` must only read. A handler behind a `GET`
+row may send statements this way and no other. -/
+def query (s : Statement) : Eff Rows :=
+  .lift (.query s)
+
+/-- Sends `s` to the database and returns its rows. `s` may write. -/
 def statement (s : Statement) : Eff Rows :=
   .lift (.statement s)
 
@@ -132,6 +146,8 @@ structure World where
   rows : List Rows := []
   /-- The statements sent so far, oldest first. -/
   sent : List Statement := []
+  /-- The statements sent so far that may write, oldest first. -/
+  written : List Statement := []
   deriving Repr, BEq, DecidableEq
 
 /-- The answer of `world` to one operation, and the world after it. -/
@@ -139,10 +155,14 @@ def Op.answer : {β : Type} → Op β → World → β × World
   | _, .now, world => (world.clock, world)
   | _, .random lo _, world => (world.dice.headD lo, { world with dice := world.dice.tail })
   | _, .log line, world => ((), { world with logs := world.logs ++ [line] })
-  | _, .statement s, world =>
+  | _, .query s, world =>
     (world.rows.headD #[],
       { world with
         rows := world.rows.tail, sent := world.sent ++ [s] })
+  | _, .statement s, world =>
+    (world.rows.headD #[],
+      { world with
+        rows := world.rows.tail, sent := world.sent ++ [s], written := world.written ++ [s] })
 
 /-- The result of a program with any index against `world`, and the world after it. -/
 def run {α : Type} {w : Wp α} (x : FreerD Op opWp α w) (world : World) : α × World :=
@@ -190,13 +210,22 @@ theorem Eff.eval_log (line : String) (world : World) :
     (log line).eval world = ((), { world with logs := world.logs ++ [line] }) :=
   rfl
 
-/-- `statement` takes the next rows, or none once none are left, and records what it sent. -/
+/-- `query` takes the next rows, or none once none are left, and records what it sent. -/
+@[simp]
+theorem Eff.eval_query (s : Statement) (world : World) :
+    (query s).eval world =
+      (world.rows.headD #[],
+        { world with
+          rows := world.rows.tail, sent := world.sent ++ [s] }) :=
+  rfl
+
+/-- `statement` does what `query` does, and also records its statement as one that may write. -/
 @[simp]
 theorem Eff.eval_statement (s : Statement) (world : World) :
     (statement s).eval world =
       (world.rows.headD #[],
         { world with
-          rows := world.rows.tail, sent := world.sent ++ [s] }) :=
+          rows := world.rows.tail, sent := world.sent ++ [s], written := world.written ++ [s] }) :=
   rfl
 
 /-- A sequence runs its first part, then the rest on that result and that world. -/

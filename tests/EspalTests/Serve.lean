@@ -37,7 +37,7 @@ def clock (_ : Public) : Handler Text := do
 
 @[budget 1]
 def userCount (_ : Public) : Handler Text := do
-  let rows ← statement ⟨"select count(*) from users", #[]⟩
+  let rows ← query ⟨"select count(*) from users", #[]⟩
   return s!"{rows.size} rows"
 
 api Bench where

@@ -98,6 +98,9 @@ theorem costs_random (lo hi : Nat) : Costs (random lo hi) 0 :=
 theorem costs_log (line : String) : Costs (log line) 0 :=
   ⟨Nat.le_refl 0, fun _ => trivial⟩
 
+theorem costs_query (s : Statement) : Costs (query s) 1 :=
+  ⟨Nat.le_refl 1, fun _ => trivial⟩
+
 theorem costs_statement (s : Statement) : Costs (statement s) 1 :=
   ⟨Nat.le_refl 1, fun _ => trivial⟩
 

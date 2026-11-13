@@ -308,6 +308,28 @@ info: Espal.Costs.sent_le {α : Type} {x : Espal.Eff α} {n : Nat} (h : Espal.Co
 #print axioms Espal.Costs.sent_le
 
 /--
+info: Espal.ReadOnly.written_eq {α : Type} {x : Espal.Eff α} (h : Espal.ReadOnly x) (world : Espal.World) :
+  (x.eval world).snd.written = world.written
+-/
+#guard_msgs in
+#check Espal.ReadOnly.written_eq
+
+/-- info: 'Espal.ReadOnly.written_eq' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Espal.ReadOnly.written_eq
+
+/--
+info: Espal.Link.toString_local (link : Espal.Link) :
+  link.toString.toList.head? = some '/' ∧ link.toString.toList[1]? ≠ some '/' ∧ link.toString.toList[1]? ≠ some '\\'
+-/
+#guard_msgs in
+#check Espal.Link.toString_local
+
+/-- info: 'Espal.Link.toString_local' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Espal.Link.toString_local
+
+/--
 info: Espal.Eff.eval_bind {α β : Type} (x : Espal.Eff α) (f : α → Espal.Eff β) (world : Espal.World) :
   (x >>= f).eval world = (f (x.eval world).fst).eval (x.eval world).snd
 -/
