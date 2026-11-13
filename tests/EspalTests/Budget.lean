@@ -309,6 +309,39 @@ info: BudgetTests.nested.budget (x✝ : Public) (b : Batch) (count : Count) : Co
 #guard_msgs in
 #check nested.budget
 
+/-! Lean can't split a `match` on an array pattern, so the walk stops there and says how to read
+the cell another way. -/
+
+/--
+error: `@[budget]` found no bound for `BudgetTests.firstCell`, because Lean can't split
+  match rows[0]? with
+  | some #[some name] => pure name
+  | x => throw FindError.notFound
+That happens for an array pattern such as `#[a]`. Read the cell with `row[0]?` and match on what it gives.
+-/
+#guard_msgs in
+@[budget]
+def firstCell (_ : Public) (id : Nat) : Fails FindError String := do
+  let rows ← query (select id)
+  match rows[0]? with
+  | some #[some name] =>
+    return name
+  | _ =>
+    throw .notFound
+
+@[budget]
+def firstCellByIndex (_ : Public) (id : Nat) : Fails FindError String := do
+  let rows ← query (select id)
+  let some row := rows[0]? | throw .notFound
+  let some (some name) := row[0]? | throw .notFound
+  return name
+
+/--
+info: BudgetTests.firstCellByIndex.budget (x✝ : Public) (id : Nat) : Costs (ExceptT.run (firstCellByIndex x✝ id)) 1
+-/
+#guard_msgs in
+#check firstCellByIndex.budget
+
 /-! A loop over a list with no bound is an error that shows the list. That includes a statement
 for each row of a result, which has no bound until queries carry their limit. -/
 
