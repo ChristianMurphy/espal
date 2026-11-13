@@ -17,6 +17,7 @@ public import EspalJson.Object
 public import EspalJson.Problem
 public import EspalJson.Recursive
 public import EspalJson.Reply
+public import EspalJson.Secret
 public import EspalJson.Small
 public import EspalJson.UInt64
 

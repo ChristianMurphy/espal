@@ -12,7 +12,9 @@ public import EspalCore.Effect
 public import EspalCore.EffectRun
 public import EspalCore.Handler
 public import EspalCore.Query
+public import EspalCore.ReadOnly
 public import EspalCore.Reply
+public import EspalCore.Secret
 
 /-!
 # espal-core

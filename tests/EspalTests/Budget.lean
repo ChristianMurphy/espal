@@ -26,11 +26,11 @@ def select (id : Nat) : Statement :=
 @[budget 2]
 def find (_ : Public) (id : Nat) : Handler Text := do
   let t ← now
-  let rows ← statement (select id)
+  let rows ← query (select id)
   if rows.isEmpty then
     log "missing"
     return "none"
-  let more ← statement ⟨"select count(*) from users", #[]⟩
+  let more ← query ⟨"select count(*) from users", #[]⟩
   return s!"{t} {rows.size} {more.size}"
 
 /-- info: BudgetTests.find.budget (x✝ : Public) (id : Nat) : Costs (find x✝ id) 2 -/
@@ -48,7 +48,7 @@ path that fails early and the path that doesn't. -/
 
 @[budget 2]
 def rename (_ : Public) (id : Nat) : Fails FindError Text := do
-  let rows ← statement (select id)
+  let rows ← query (select id)
   if rows.isEmpty then
     throw .notFound
   let t ← now
@@ -112,7 +112,7 @@ worst case, counted over the path that sends the most. -/
 
 @[budget]
 def branchy (_ : Public) (id : Nat) : Fails FindError Text := do
-  let rows ← statement (select id)
+  let rows ← query (select id)
   if rows.isEmpty then
     throw .notFound
   let _ ← statement ⟨"insert into audit values ($1)", #[toString id]⟩
@@ -151,7 +151,7 @@ def twice (_ : Public) (id : Nat) : Handler Text := do
 @[budget]
 def renameThenCount (_ : Public) (id : Nat) : Fails FindError Text := do
   let renamed ← rename {} id
-  let rows ← statement ⟨"select count(*) from users", #[]⟩
+  let rows ← query ⟨"select count(*) from users", #[]⟩
   return s!"{renamed.text} {rows.size}"
 
 /--
@@ -178,7 +178,7 @@ def pinnedLow (_ : Public) (id : Nat) : Handler Text := do
 /-! A helper with no `budget` theorem is unfolded, so its statements count too. -/
 
 def helperNoBudget (id : Nat) : Handler Rows :=
-  statement (select id)
+  query (select id)
 
 @[budget]
 def viaUnmarked (_ : Public) (id : Nat) : Handler Nat := do
@@ -194,7 +194,7 @@ def viaUnmarked (_ : Public) (id : Nat) : Handler Nat := do
 
 @[budget]
 def firstRow (_ : Public) (id : Nat) : Fails FindError Text := do
-  let rows ← statement (select id)
+  let rows ← query (select id)
   match rows[0]? with
   | none =>
     throw .notFound
@@ -218,7 +218,7 @@ abbrev Count :=
 
 @[budget]
 def queries (_ : Public) (count : Count) : Handler Text := do
-  let rows ← (List.range count.val).mapM fun i => statement (select i)
+  let rows ← (List.range count.val).mapM fun i => query (select i)
   return s!"{rows.length}"
 
 /--
@@ -237,8 +237,8 @@ info: BudgetTests.queries.budget (x✝ : Public) (count : Count) : Costs (querie
 def firstTwenty (_ : Public) (ids : List Nat) : Handler Nat := do
   let mut total := 0
   for id in ids.take 20 do
-    let rows ← statement (select id)
-    let more ← statement (select (id + 1))
+    let rows ← query (select id)
+    let more ← query (select (id + 1))
     total := total + rows.size + more.size
   return total
 
@@ -262,7 +262,7 @@ structure Batch where
 def batch (_ : Public) (b : Batch) : Fails FindError Text := do
   let header ← statement ⟨"begin", #[]⟩
   for id in b.ids do
-    let rows ← statement ⟨"select name from users where id = $1", #[toString id.toInt]⟩
+    let rows ← query ⟨"select name from users where id = $1", #[toString id.toInt]⟩
     if rows.isEmpty then
       throw .notFound
   return s!"{header.size}"
@@ -283,7 +283,7 @@ info: '_private.EspalTests.Budget.0.BudgetTests.batch.budget' depends on axioms:
 
 @[budget]
 def bounded (_ : Public) (ids : List Nat) (_ : ids.length ≤ 7) : Handler Nat := do
-  let rows ← ids.mapM fun id => statement (select id)
+  let rows ← ids.mapM fun id => query (select id)
   return rows.length
 
 /--
@@ -299,7 +299,7 @@ def nested (_ : Public) (b : Batch) (count : Count) : Handler Nat := do
   let mut n := 0
   for _ in b.ids do
     for i in List.range count.val do
-      let rows ← statement (select i)
+      let rows ← query (select i)
       n := n + rows.size
   return n
 
@@ -320,7 +320,7 @@ has no bound on its length. Take at most `n` items with `.take n`, count with a 
 #guard_msgs in
 @[budget]
 def perItem (_ : Public) (ids : List Nat) : Handler Nat := do
-  let rows ← ids.mapM fun id => statement (select id)
+  let rows ← ids.mapM fun id => query (select id)
   return rows.length
 
 /--
@@ -331,10 +331,10 @@ has no bound on its length. Take at most `n` items with `.take n`, count with a 
 #guard_msgs in
 @[budget]
 def perRow (_ : Public) : Handler Nat := do
-  let rows ← statement ⟨"select id from users", #[]⟩
+  let rows ← query ⟨"select id from users", #[]⟩
   let mut n := 0
   for row in rows.toList do
-    let more ← statement ⟨"select name from users where id = $1", #[toString row.size]⟩
+    let more ← query ⟨"select name from users where id = $1", #[toString row.size]⟩
     n := n + more.size
   return n
 
@@ -364,7 +364,7 @@ A table accepts a handler with a budget within its limit, and infers the budget 
 that has none. With no limit stated, the limit is the option `espal.statementLimit`, which is 10. -/
 
 def unmarked (_ : Public) : Handler Text := do
-  let rows ← statement ⟨"select 1", #[]⟩
+  let rows ← query ⟨"select 1", #[]⟩
   return s!"{rows.size}"
 
 api Users where
@@ -387,7 +387,7 @@ api Users where
 
 @[budget 12]
 def heavy (_ : Public) : Handler Nat := do
-  let a ← statement ⟨"a", #[]⟩
+  let a ← query ⟨"a", #[]⟩
   return a.size
 
 /--
@@ -399,17 +399,17 @@ api Heavy where
   GET "/heavy" => heavy
 
 def eleven (_ : Public) : Handler Nat := do
-  let _ ← statement ⟨"1", #[]⟩
-  let _ ← statement ⟨"2", #[]⟩
-  let _ ← statement ⟨"3", #[]⟩
-  let _ ← statement ⟨"4", #[]⟩
-  let _ ← statement ⟨"5", #[]⟩
-  let _ ← statement ⟨"6", #[]⟩
-  let _ ← statement ⟨"7", #[]⟩
-  let _ ← statement ⟨"8", #[]⟩
-  let _ ← statement ⟨"9", #[]⟩
-  let _ ← statement ⟨"10", #[]⟩
-  let last ← statement ⟨"11", #[]⟩
+  let _ ← query ⟨"1", #[]⟩
+  let _ ← query ⟨"2", #[]⟩
+  let _ ← query ⟨"3", #[]⟩
+  let _ ← query ⟨"4", #[]⟩
+  let _ ← query ⟨"5", #[]⟩
+  let _ ← query ⟨"6", #[]⟩
+  let _ ← query ⟨"7", #[]⟩
+  let _ ← query ⟨"8", #[]⟩
+  let _ ← query ⟨"9", #[]⟩
+  let _ ← query ⟨"10", #[]⟩
+  let last ← query ⟨"11", #[]⟩
   return last.size
 
 /--
@@ -500,7 +500,7 @@ api Reported (limit := 20) where
   GET "/users/:id" => find
   PUT "/users/:id" => rename
   GET "/unmarked" => unmarked
-  GET "/branchy/:id" => branchy limit 3
+  POST "/branchy/:id" => branchy limit 3
   GET "/twice/:id" => twice
   GET "/eleven" => eleven
   GET "/greeting" => greeting
@@ -510,7 +510,7 @@ info: method  path          handler               budget  limit
 GET     /users/:id    BudgetTests.find      2       20
 PUT     /users/:id    BudgetTests.rename    2       20
 GET     /unmarked     BudgetTests.unmarked  1       20
-GET     /branchy/:id  BudgetTests.branchy   3       3
+POST    /branchy/:id  BudgetTests.branchy   3       3
 GET     /twice/:id    BudgetTests.twice     4       20
 GET     /eleven       BudgetTests.eleven    11      20
 GET     /greeting     BudgetTests.greeting  -       20
