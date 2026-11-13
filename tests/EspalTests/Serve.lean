@@ -8,7 +8,8 @@ meta import EspalJson
 /-!
 Tests for `Api.toHandler` in `EspalHttp.Serve`. A request reaches the handler its route names, with
 its captures, its query parameters and its body. Any other request gets `404 Not Found`, a body that doesn't decode gets
-its problem, and a body over the limit gets `413`. A known path under another method gets `405`,
+its problem, and a body over the limit gets `413`. A handler's statements go to the database
+function the server was given, and a failing run gets `500`. A known path under another method gets `405`,
 and a body that doesn't declare JSON gets `415`.
 -/
 
@@ -34,7 +35,13 @@ def clock (_ : Public) : Handler Text := do
   let t ← now
   return s!"{t}"
 
+@[budget 1]
+def userCount (_ : Public) : Handler Text := do
+  let rows ← statement ⟨"select count(*) from users", #[]⟩
+  return s!"{rows.size} rows"
+
 api Bench where
+  GET "/count" => userCount
   GET "/clock" => clock
   GET "/plaintext" => plaintext
   GET "/users/:id" => showUser
@@ -164,3 +171,34 @@ def check (label : String) (ok : Bool) : IO Unit :=
     let (status, text) ← get "/clock"
     check s!"GET /clock should get a current timestamp, got {repr (status, text)}"
         (status == .ok && (text.toNat?.getD 0) > 1700000000000)
+
+/-! A statement goes to the server's database function. With none configured the run fails, and
+the request gets `500` with no detail about the cause. -/
+
+#eval
+  show IO Unit from do
+    let uri ← parseTarget "/count"
+    let body ← Async.block Body.empty
+    let seen ← IO.mkRef ([] : List Statement)
+    let database : Database := fun s => do
+      seen.modify (· ++ [s])
+      return #[#[some "3"]]
+    let response ←
+      Async.block <|
+          ContextAsync.run do
+            let response ←
+              (Bench.toHandler (database := database)).onRequest ((Request.get uri).body body)
+            let text ←
+              match ← response.body.recv with
+              | some chunk =>
+                pure ((String.fromUTF8? chunk.data).getD "")
+              | none =>
+                pure ""
+            return (response.line.status, text)
+    check s!"GET /count with a database should get 1 rows, got {repr response}"
+        (response == (.ok, "1 rows"))
+    check s!"the database should see one statement, saw {repr (← seen.get)}"
+        ((← seen.get) == [⟨"select count(*) from users", #[]⟩])
+    let (status, text) ← get "/count"
+    check s!"GET /count with no database should get 500, got {repr (status, text)}"
+        (status == .internalServerError && (text.splitOn "/problems/internal").length == 2)

@@ -10,19 +10,21 @@ public import EspalCore.Graded.Freer
 /-!
 # Effects as data
 
-A handler asks for the time, a random number or a log line by returning a program. It has no
-`IO` access. An interpreter answers each request, so the same program runs against the real world
-or against a `World` that a test supplies.
+A handler asks for the time, a random number, a log line or a database statement by returning a
+program. It has no `IO` access. An interpreter answers each request, so the same program runs
+against the real world or against a `World` that a test supplies.
 
-`Eff α` is a program that sends no database statement. It is a monad, so handlers use `do`
-notation. `Eff.eval` runs one against a `World`, and `Eff.eval_pure` and `Eff.eval_bind` say how
-that run follows the program's steps. A handler's result therefore depends only on the program and
-on what the `World` answers.
+`Eff α` is such a program. It is a monad, so handlers use `do` notation. `Eff.eval` runs one
+against a `World`, and the `Eff.eval_` theorems say how that run follows the program's steps. A
+handler's result therefore depends only on the program and on what the `World` answers.
 
-The program type is lean-linq's `FreerD`, copied into `EspalCore.Graded`. Its type carries an
-upper bound on cost. lean-linq charges every operation one unit, and Espal charges only database
-statements. So `runCost` takes the cost of each operation, and `runCost_cost_le` shows that a run
-stays within the bound in the program's type.
+`Costs x n` says that `x` sends at most `n` statements on every path. The `budget` tactic proves
+it by following the program's structure, and `Costs.sent_le` shows that a run against any `World`
+stays within a proved bound.
+
+The program type is lean-linq's `FreerD`, copied into `EspalCore.Graded`. lean-linq carries a cost
+bound in the program's type. Espal leaves that index empty and proves `Costs` beside the handler,
+so `Eff` is an ordinary monad.
 
 `Eff` has no `LawfulMonad` instance. The two sides of a monad law evaluate to the same result, by
 `Eff.eval_bind`, but they are different program values.
@@ -34,47 +36,7 @@ namespace Espal
 
 open LeanLinq
 
-/-! ## Running a program at a cost for each operation -/
-
-/-- A handler for each operation of `E`, over a state `S` that `obs` observes. Each run meets the
-operation's spec and spends the operation's `cost`. -/
-def CostHandler (E : Type → Type 1) (spec : EffWp E) (cost : {β : Type} → E β → Nat) (ε S : Type)
-    (obs : S → (String → Nat)) : Type 1 :=
-  {β : Type} →
-    (e : E β) →
-    (s : S) → Except ε { p : β × S // ∀ k, (spec e).sp p.1 (obs s) k (obs p.2) (k + cost e) }
-
-/-- Runs `x` from state `s` with `h`. The result holds the value, the final state and the cost
-spent, with a proof that they meet the program's spec. -/
-def runCost {E : Type → Type 1} {spec : EffWp E} {cost : {β : Type} → E β → Nat} {ε S : Type}
-    {obs : S → (String → Nat)} (h : CostHandler E spec cost ε S obs) :
-    {α : Type} →
-      {w : Wp α} →
-      FreerD E spec α w →
-        (s : S) → Except ε { p : α × S × Nat // ∀ k₀, w.sp p.1 (obs s) k₀ (obs p.2.1) (k₀ + p.2.2) }
-  | _, _, .pure a, s => .ok ⟨(a, s, 0), fun _ _ hp => hp⟩
-  | _, _, .bindE e f, s => do
-    let ⟨(b, s₁), he⟩ ← h e s
-    let ⟨(a₂, s₂, n), hf⟩ ← runCost h (f b) s₁
-    .ok
-        ⟨(a₂, s₂, cost e + n), fun k₀ => by
-          have hcomp := hf (k₀ + cost e)
-          rw [Nat.add_assoc] at hcomp
-          exact fun post hw => hcomp post (he k₀ _ hw)⟩
-  | _, _, .weaken hle x, s => do
-    let ⟨p, hp⟩ ← runCost h x s
-    .ok ⟨p, fun k₀ post hw => hp k₀ post (hle post _ _ hw)⟩
-
-/-- A program whose type carries the bound `r` spends at most `r`, under any handler that meets
-each operation's spec at its cost. -/
-theorem runCost_cost_le {E : Type → Type 1} {spec : EffWp E} {cost : {β : Type} → E β → Nat}
-    {ε S : Type} {obs : S → (String → Nat)} {h : CostHandler E spec cost ε S obs} {r : Grade}
-    {α : Type} {x : FreerD E spec α (Wp.bill r)} {s : S}
-    {res : { p : α × S × Nat // ∀ k₀, (Wp.bill r).sp p.1 (obs s) k₀ (obs p.2.1) (k₀ + p.2.2) }}
-    (_hrun : runCost h x s = .ok res) : res.val.2.2 ≤ r.eval (obs s) := by
-  have hsp := res.property 0
-  have := hsp (fun _ _ k => k ≤ r.eval (obs s)) fun a σ' k' hk => by omega
-  omega
+/-! ## Folding a sequence -/
 
 /-- Running `x` and then `k` on its result gives what running their sequence gives. -/
 theorem foldSt_bindS {E : Type → Type 1} {spec : EffWp E} {ε S : Type}
@@ -97,6 +59,18 @@ theorem foldSt_bindS {E : Type → Type 1} {spec : EffWp E} {ε S : Type}
 
 /-! ## The operations a handler may ask for -/
 
+/-- One database statement, as SQL text and its bind parameters. -/
+structure Statement where
+  /-- The SQL text, with a placeholder for each parameter. -/
+  sql : String
+  /-- The value of each parameter, in order. -/
+  params : Array String := #[]
+  deriving Repr, BEq, DecidableEq, Inhabited
+
+/-- The rows a statement returns. Each cell is text, or `none` for a null. -/
+abbrev Rows :=
+  Array (Array (Option String))
+
 /-- What a handler may ask for. The index is the type of the answer. -/
 inductive Op : Type → Type 1 where
   /-- The time, in milliseconds since the Unix epoch. -/
@@ -105,35 +79,28 @@ inductive Op : Type → Type 1 where
   | random (lo hi : Nat) : Op Nat
   /-- Writes one line to the log. -/
   | log (line : String) : Op Unit
+  /-- Sends one statement to the database. -/
+  | statement (s : Statement) : Op Rows
 
-/-- What each operation promises. None of them sends a statement, so none spends anything. The
-spec of `random` says nothing about its bounds. -/
-def opWp : EffWp Op
-  | _, .now => fun post σ k => ∀ n, post n σ k
-  | _, .random _ _ => fun post σ k => ∀ n, post n σ k
-  | _, .log _ => fun post σ k => post () σ k
+/-- What an operation costs. A statement costs one, and the others cost nothing. -/
+def Op.cost : {β : Type} → Op β → Nat
+  | _, .statement _ => 1
+  | _, _ => 0
 
-/-- Each of them fits a bound of zero. -/
-theorem opWp_free {β : Type} (e : Op β) : (opWp e).le (Wp.bill 0) := by
-  cases e <;> intro post σ k h <;>
-    first
-    | (intro n; exact h n σ k (by simp))
-    | exact h () σ k (by simp)
+/-- The spec of every operation is empty, since `Costs` holds the bound. -/
+def opWp : EffWp Op := fun _ => Wp.triv _
 
-/-- A program that may read the clock, draw random numbers and log, and that sends no database
-statement. -/
+/-- A program that may read the clock, draw random numbers, log and send statements. -/
 def Eff (α : Type) : Type 1 :=
-  FreerD Op opWp α (Wp.bill 0)
+  FreerD Op opWp α (Wp.triv α)
 
 /-- The program that asks for `e` and returns its answer. -/
 def Eff.lift {β : Type} (e : Op β) : Eff β :=
-  FreerD.weaken (opWp_free e) (FreerD.liftE e)
+  FreerD.weaken (fun _ _ _ h => h.elim) (FreerD.liftE e)
 
 instance : Monad Eff where
-  pure a := FreerD.weaken (Wp.bill_pure a 0) (.pure a)
-  bind x k :=
-    FreerD.weaken (Wp.bill_bind_of_le (Wp.le_refl _) (fun _ => Wp.le_refl _) (Grade.stable_nat 0))
-      (FreerD.bindS x k)
+  pure a := FreerD.weaken (fun _ _ _ h => h.elim) (.pure a)
+  bind x k := FreerD.bindS x k
 
 /-- The time, in milliseconds since the Unix epoch. -/
 def now : Eff Nat :=
@@ -147,6 +114,10 @@ def random (lo hi : Nat) : Eff Nat :=
 def log (line : String) : Eff Unit :=
   .lift (.log line)
 
+/-- Sends `s` to the database and returns its rows. -/
+def statement (s : Statement) : Eff Rows :=
+  .lift (.statement s)
+
 /-! ## Running against a supplied world -/
 
 /-- What the outside answers during one request. -/
@@ -157,6 +128,10 @@ structure World where
   dice : List Nat := []
   /-- The lines logged so far, oldest first. -/
   logs : List String := []
+  /-- The rows the next statements get, in order. Once they run out, a statement gets none. -/
+  rows : List Rows := []
+  /-- The statements sent so far, oldest first. -/
+  sent : List Statement := []
   deriving Repr, BEq, DecidableEq
 
 /-- The answer of `world` to one operation, and the world after it. -/
@@ -164,11 +139,29 @@ def Op.answer : {β : Type} → Op β → World → β × World
   | _, .now, world => (world.clock, world)
   | _, .random lo _, world => (world.dice.headD lo, { world with dice := world.dice.tail })
   | _, .log line, world => ((), { world with logs := world.logs ++ [line] })
+  | _, .statement s, world =>
+    (world.rows.headD #[],
+      { world with
+        rows := world.rows.tail, sent := world.sent ++ [s] })
+
+/-- The result of a program with any index against `world`, and the world after it. -/
+def run {α : Type} {w : Wp α} (x : FreerD Op opWp α w) (world : World) : α × World :=
+  match FreerD.foldSt (ε := Empty) (fun e s => .ok (Op.answer e s)) x world with
+  | .ok result => result
+
+/-- A sequence runs its first part, then the rest on that result and that world. -/
+theorem run_bindS {α β : Type} {w : Wp α} {w₂ : α → Wp β} (x : FreerD Op opWp α w)
+    (k : (a : α) → FreerD Op opWp β (w₂ a)) (world : World) :
+    run (FreerD.bindS x k) world = run (k (run x world).1) (run x world).2 := by
+  unfold run
+  rw [foldSt_bindS]
+  cases FreerD.foldSt (ε := Empty) (fun e s => .ok (Op.answer e s)) x world with
+  | error e => exact e.elim
+  | ok r => rfl
 
 /-- The result of `x` against `world`, and the world after it. -/
 def Eff.eval {α : Type} (x : Eff α) (world : World) : α × World :=
-  match FreerD.foldSt (ε := Empty) (fun e s => .ok (Op.answer e s)) x world with
-  | .ok result => result
+  run x world
 
 /-- The result of `x` against `world`, without the world after it. Tests read a reply this way. -/
 def Eff.value {α : Type} (x : Eff α) (world : World := { clock := 0 }) : α :=
@@ -197,17 +190,19 @@ theorem Eff.eval_log (line : String) (world : World) :
     (log line).eval world = ((), { world with logs := world.logs ++ [line] }) :=
   rfl
 
+/-- `statement` takes the next rows, or none once none are left, and records what it sent. -/
+@[simp]
+theorem Eff.eval_statement (s : Statement) (world : World) :
+    (statement s).eval world =
+      (world.rows.headD #[],
+        { world with
+          rows := world.rows.tail, sent := world.sent ++ [s] }) :=
+  rfl
+
 /-- A sequence runs its first part, then the rest on that result and that world. -/
 theorem Eff.eval_bind {α β : Type} (x : Eff α) (f : α → Eff β) (world : World) :
-    (x >>= f).eval world = (f (x.eval world).1).eval (x.eval world).2 := by
-  show Eff.eval (FreerD.weaken _ (FreerD.bindS x f)) world = _
-  unfold Eff.eval
-  simp only [FreerD.foldSt]
-  have hb := foldSt_bindS (spec := opWp) (ε := Empty) (fun e s => .ok (Op.answer e s)) x f world
-  rw [hb]
-  cases FreerD.foldSt (ε := Empty) (fun e s => .ok (Op.answer e s)) x world with
-  | error e => exact e.elim
-  | ok r => rfl
+    (x >>= f).eval world = (f (x.eval world).1).eval (x.eval world).2 :=
+  run_bindS x f world
 
 /-- Mapping a function over a program applies it to the result and leaves the world alone. -/
 @[simp]
