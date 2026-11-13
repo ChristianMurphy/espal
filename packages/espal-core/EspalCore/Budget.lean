@@ -23,7 +23,12 @@ makes the handler send more then fails where the handler is defined.
 
 The walk follows sequences, `if`, `match`, `throw` and effects. A call to a handler or helper
 that has a `budget` theorem costs what that theorem states, and a call to any other definition is
-unfolded. A loop over statements has no bound the walk can find.
+unfolded.
+
+A loop over a list, written as `mapM` or as `for`, costs the bound on the list's length times the
+most one pass can send. The walk finds that bound in three places: a `.take n`, a `List.range` over
+a `Clamp` value, and a proof such as `small : items.length ≤ n`, in scope or as a field of the
+structure that holds the list. A loop over any other list is an error.
 
 The option `espal.statementLimit` is the limit an `api` table applies to a row that states none.
 -/
@@ -88,8 +93,93 @@ meta def throwNames : List Name :=
 
 /-- Stops the walk at a program it can't follow. -/
 meta def lost {α : Type} (program : Expr) : MetaM α :=
-  throwError m!"it can't follow{indentExpr program}\nA loop over statements needs a bound that \
-    is proved by hand."
+  throwError m!"it can't follow{indentExpr program}"
+
+/-- The number that `n` is, if it is a numeral. -/
+meta def numeral? (n : Expr) : MetaM (Option Nat) := do
+  let n ← instantiateMVars n
+  return n.nat?.orElse fun _ => n.rawNatLit?
+
+/-- A number that `n` can't exceed, with a proof of `n ≤ bound`. A numeral bounds itself, and the
+value of a `Clamp lo hi` is bounded by `hi`. -/
+meta def natBound? (n : Expr) : MetaM (Option (Nat × Expr)) := do
+  let n := (← instantiateMVars n).consumeMData
+  if let some value← numeral? n then
+    return some (value, ← mkAppM ``Nat.le_refl #[n])
+  if n.isAppOf ``Espal.Clamp.val then
+    let some clamp := n.getAppArgs.back?
+      | return none
+    let clampType ← whnfR (← inferType clamp)
+    let some high := clampType.getAppArgs[1]?
+      | return none
+    let some limit ← numeral? high | return none
+    return some (limit, ← mkAppM ``Espal.Clamp.le #[clamp])
+  return none
+
+/-- A proof that the list `xs` is no longer than some number. It comes from a hypothesis in scope,
+or from a proof field of the structure that holds `xs`. -/
+meta def statedLength? (xs : Expr) : MetaM (Option (Nat × Expr)) := do
+  let fits (proof : Expr) : MetaM (Option (Nat × Expr)) := do
+    let type ← instantiateMVars (← inferType proof)
+    let_expr LE.le _ _ left right := type
+      | return none
+    let_expr List.length _ list := left
+      | return none
+    let some limit ← numeral? right | return none
+    if ← isDefEq list xs then
+      return some (limit, proof)
+    return none
+  for decl in ← getLCtx do
+    if decl.isImplementationDetail then
+      continue
+    if let some found← fits decl.toExpr then
+      return some found
+  -- `xs` as a field `s.items` of a structure value `s`, whose other fields may bound it.
+  let fn := xs.getAppFn
+  let some fieldFn := fn.constName?
+    | return none
+  let some info := (← getEnv).getProjectionFnInfo? fieldFn
+    | return none
+  let some owner := xs.getAppArgs[info.numParams]?
+    | return none
+  let .ctorInfo ctor := (← getEnv).find? info.ctorName |>.getD default
+    | return none
+  for field in getStructureFields (← getEnv) ctor.induct do
+    let proof ←
+      try
+        mkProjection owner field
+      catch _ =>
+        continue
+    if let some found← fits proof then
+      return some found
+  return none
+
+/-- A number that the length of the list `xs` can't exceed, with a proof of
+`xs.length ≤ bound`. `none` when nothing bounds it. -/
+meta def lengthBound? (xs : Expr) : (fuel : Nat) → MetaM (Option (Nat × Expr))
+  | 0 => return none
+  | fuel + 1 => do
+    let xs := (← instantiateMVars xs).consumeMData
+    if let some found← statedLength? xs then
+      return some found
+    match_expr xs with
+    | List.take _ count list =>
+      let some limit ← numeral? count | return none
+      return some (limit, ← mkAppM ``List.length_take_le #[count, list])
+    | List.range count =>
+      let some (limit, fits) ← natBound? count | return none
+      return some (limit, ← mkAppM ``Espal.length_range_le #[fits])
+    | List.map _ _ f list =>
+      let some (limit, fits) ← lengthBound? list fuel | return none
+      return some (limit, ← mkAppM ``Espal.length_map_le #[f, fits])
+    | _ =>
+      return none
+
+/-- Stops the walk at a loop whose list has no bound. -/
+meta def unbounded {α : Type} (xs : Expr) : MetaM α :=
+  throwError m!"the loop over{indentExpr xs}\nhas no bound on its length. Take at most `n` \
+    items with `.take n`, count with a `Clamp`, or give the input a proof field such as \
+    `small : items.length ≤ n`."
 
 /-- The most statements `program` can send, with a proof of `Costs (underlying program) bound`.
 `self?` is the handler being walked, whose own `budget` theorem must not be used. `fuel` bounds
@@ -126,6 +216,31 @@ meta def walk (self? : Option Name) (program : Expr) : (fuel : Nat) → MetaM (N
       let (j, hk) ← under k fun body => walk self? body fuel
       let lemma := if layer == .eff then ``Espal.costs_bind else ``Espal.costsT_bind
       return (m + j, ← mkAppM lemma #[x, k, hx, hk])
+    | some ``List.mapM, #[_, _, _, _, f, xs] =>
+      -- A loop costs the bound on its list's length times the most one pass can send.
+      let (j, hf) ← under f fun body => walk self? body fuel
+      let some (limit, fits) ← lengthBound? xs 16 | unbounded xs
+      let lemma := if layer == .eff then ``Espal.costs_mapM else ``Espal.costsT_mapM
+      let looped ← mkAppM lemma #[f, xs, hf]
+      let widened ← mkAppM ``Nat.mul_le_mul_right #[mkNatLit j, fits]
+      known (← mkAppOptM ``Espal.Costs.mono #[none, none, none, none, none, looped, widened])
+          (limit * j)
+    | some ``ForIn.forIn, #[_, _, _, _, _, xs, init, f] =>
+      unless (← whnfR (← inferType xs)).isAppOf ``List do
+        lost program
+      let (j, hf) ←
+        under f fun partial_ => do
+            let some (.forallE name domain _ _) := some (← whnf (← inferType partial_))
+              | lost program
+            withLocalDeclD name domain fun state => do
+                let (bound, proof) ← walk self? (mkApp partial_ state).headBeta fuel
+                return (bound, ← mkLambdaFVars #[state] proof)
+      let some (limit, fits) ← lengthBound? xs 16 | unbounded xs
+      let lemma := if layer == .eff then ``Espal.costs_forIn else ``Espal.costsT_forIn
+      let looped ← mkAppM lemma #[xs, init, f, hf]
+      let widened ← mkAppM ``Nat.mul_le_mul_right #[mkNatLit j, fits]
+      known (← mkAppOptM ``Espal.Costs.mono #[none, none, none, none, none, looped, widened])
+          (limit * j)
     | some ``Functor.map, #[_, _, _, _, f, x] =>
       let (m, hx) ← walk self? x fuel
       let lemma := if layer == .eff then ``Espal.costs_map else ``Espal.costsT_map

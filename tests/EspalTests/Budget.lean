@@ -208,18 +208,135 @@ info: BudgetTests.firstRow.budget (x✝ : Public) (id : Nat) : Costs (ExceptT.ru
 #guard_msgs in
 #check firstRow.budget
 
-/-! A loop over statements has no bound the walk can find. The error shows the loop. -/
+/-! ## Loops
+
+A loop costs the bound on its list's length times the most one pass can send. A `Clamp` count
+gives the bound through `List.range`. -/
+
+abbrev Count :=
+  Clamp 1 500
+
+@[budget]
+def queries (_ : Public) (count : Count) : Handler Text := do
+  let rows ← (List.range count.val).mapM fun i => statement (select i)
+  return s!"{rows.length}"
 
 /--
-error: `@[budget]` found no bound for `BudgetTests.perItem`, because it can't follow
-  List.mapM (fun id => statement (select id)) ids
-A loop over statements needs a bound that is proved by hand.
+info: BudgetTests.queries.budget (x✝ : Public) (count : Count) : Costs (queries x✝ count) 500
+-/
+#guard_msgs in
+#check queries.budget
+
+/-! A run sends one statement for each item, which is within the bound. -/
+
+#guard ((queries {} (.ofNat (by decide) 3)).eval { clock := 0 }).2.sent.length == 3
+
+/-! `.take n` bounds a `for` loop, and each pass may send several statements. -/
+
+@[budget]
+def firstTwenty (_ : Public) (ids : List Nat) : Handler Nat := do
+  let mut total := 0
+  for id in ids.take 20 do
+    let rows ← statement (select id)
+    let more ← statement (select (id + 1))
+    total := total + rows.size + more.size
+  return total
+
+/--
+info: BudgetTests.firstTwenty.budget (x✝ : Public) (ids : List Nat) : Costs (firstTwenty x✝ ids) 40
+-/
+#guard_msgs in
+#check firstTwenty.budget
+
+#guard ((firstTwenty {} (List.range 50)).eval { clock := 0 }).2.sent.length == 40
+
+/-! A proof field on the input bounds a loop over the field it names. The loop below can also
+fail, and it sits after a statement of its own. -/
+
+structure Batch where
+  ids : List Int32
+  small : ids.length ≤ 100
+  deriving Json
+
+@[budget]
+def batch (_ : Public) (b : Batch) : Fails FindError Text := do
+  let header ← statement ⟨"begin", #[]⟩
+  for id in b.ids do
+    let rows ← statement ⟨"select name from users where id = $1", #[toString id.toInt]⟩
+    if rows.isEmpty then
+      throw .notFound
+  return s!"{header.size}"
+
+/--
+info: BudgetTests.batch.budget (x✝ : Public) (b : Batch) : Costs (ExceptT.run (batch x✝ b)) 101
+-/
+#guard_msgs in
+#check batch.budget
+
+/--
+info: '_private.EspalTests.Budget.0.BudgetTests.batch.budget' depends on axioms: [propext, Quot.sound]
+-/
+#guard_msgs in
+#print axioms batch.budget
+
+/-! A hypothesis in scope bounds a loop the same way. -/
+
+@[budget]
+def bounded (_ : Public) (ids : List Nat) (_ : ids.length ≤ 7) : Handler Nat := do
+  let rows ← ids.mapM fun id => statement (select id)
+  return rows.length
+
+/--
+info: BudgetTests.bounded.budget (x✝ : Public) (ids : List Nat) (x✝¹ : ids.length ≤ 7) : Costs (bounded x✝ ids x✝¹) 7
+-/
+#guard_msgs in
+#check bounded.budget
+
+/-! Nested loops multiply. -/
+
+@[budget]
+def nested (_ : Public) (b : Batch) (count : Count) : Handler Nat := do
+  let mut n := 0
+  for _ in b.ids do
+    for i in List.range count.val do
+      let rows ← statement (select i)
+      n := n + rows.size
+  return n
+
+/--
+info: BudgetTests.nested.budget (x✝ : Public) (b : Batch) (count : Count) : Costs (nested x✝ b count) 50000
+-/
+#guard_msgs in
+#check nested.budget
+
+/-! A loop over a list with no bound is an error that shows the list. That includes a statement
+for each row of a result, which has no bound until queries carry their limit. -/
+
+/--
+error: `@[budget]` found no bound for `BudgetTests.perItem`, because the loop over
+  ids
+has no bound on its length. Take at most `n` items with `.take n`, count with a `Clamp`, or give the input a proof field such as `small : items.length ≤ n`.
 -/
 #guard_msgs in
 @[budget]
 def perItem (_ : Public) (ids : List Nat) : Handler Nat := do
   let rows ← ids.mapM fun id => statement (select id)
   return rows.length
+
+/--
+error: `@[budget]` found no bound for `BudgetTests.perRow`, because the loop over
+  rows.toList
+has no bound on its length. Take at most `n` items with `.take n`, count with a `Clamp`, or give the input a proof field such as `small : items.length ≤ n`.
+-/
+#guard_msgs in
+@[budget]
+def perRow (_ : Public) : Handler Nat := do
+  let rows ← statement ⟨"select id from users", #[]⟩
+  let mut n := 0
+  for row in rows.toList do
+    let more ← statement ⟨"select name from users where id = $1", #[toString row.size]⟩
+    n := n + more.size
+  return n
 
 /-! The `budget` tactic proves a bound stated by hand, and refuses one that is too small. -/
 
@@ -326,6 +443,28 @@ api Tight (limit := 1) where
 api TightRow (limit := 1) where
   GET "/unmarked" => unmarked
   GET "/users/:id" => find limit 2
+
+/-! A loop's budget goes through a table like any other, so the row raises its limit. -/
+
+api Looping where
+  GET "/queries" => queries limit 500
+  POST "/batch" => batch limit 101
+
+/--
+error: `BudgetTests.queries` may send 500 database statements, and this route's limit is 10.
+Raise the limit on the row with `limit 500`, or send fewer.
+-/
+#guard_msgs in
+api LoopingTight where
+  GET "/queries" => queries
+
+/-! An oversized body fails its proof field, so the handler never runs. -/
+
+#guard
+  (Looping.reply? .post ["batch"] [] (some "application/json")
+          ("{\"ids\":[" ++ ",".intercalate (List.replicate 101 "1") ++ "]}").toUTF8).map
+      (·.status) ==
+    some 422
 
 /-! The option sets the limit for every table after it that states none. -/
 
