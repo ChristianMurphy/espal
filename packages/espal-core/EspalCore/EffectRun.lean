@@ -13,7 +13,7 @@ import Std.Time
 
 `Eff.run` answers each operation of a program from the machine it runs on. It reads the system
 clock, draws from Lean's random generator, writes log lines to standard error and hands each
-statement to a `Database` function. No proof covers it. `Eff.eval` in `EspalCore.Effect` is the pure run that the proofs describe.
+statement to a `Database` function, whether it came from `query` or `statement`. No proof covers it. `Eff.eval` in `EspalCore.Effect` is the pure run that the proofs describe.
 -/
 
 public section
@@ -36,6 +36,7 @@ def Op.perform (database : Database) : {β : Type} → Op β → IO β
     return stamp.toMillisecondsSinceUnixEpoch.val.toNat
   | _, .random lo hi => IO.rand lo hi
   | _, .log line => IO.eprintln line
+  | _, .query s => database s
   | _, .statement s => database s
 
 /-- Runs `x` against the machine, with `database` running its statements. -/

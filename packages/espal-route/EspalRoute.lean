@@ -8,6 +8,7 @@ module
 public import EspalRoute.Api
 public import EspalRoute.Created
 public import EspalRoute.Link
+public import EspalRoute.Redirect
 public import EspalRoute.Table
 
 /-!

@@ -54,6 +54,10 @@ its own with `limit n` after the handler, a table states one for its rows with
 unless the app sets it. The command checks the handler's `budget` theorem, or infers the budget
 when the handler has none.
 
+A handler behind a `GET` row must leave the database as it was. The command proves `ReadOnly` for
+it, as the theorem `h.readOnly`, and refuses a handler that sends a statement with `statement`.
+Such a handler reads with `query`.
+
 `#routes Name` lists a table's rows with each handler's budget and the row's limit. Hovering a
 row's path shows the handler's `budget` theorem.
 -/
@@ -521,6 +525,9 @@ elab_rules : command
     for r in rowsArr do
       let rowLimit := r.limit?.getD tableLimit
       withRef r.ref <| liftTermElabM <| liftM <| Espal.Budget.ensure r.handler rowLimit
+      -- A `GET` row's handler must leave the database as it was.
+      if r.methodText == "GET" then
+        withRef r.ref <| liftTermElabM <| liftM <| Espal.Budget.ensureReads r.handler
       -- Hovering a row's path shows the handler's proved budget.
       if (← getEnv).contains (r.handler ++ `budget) then
         if let `(apiRoute| $_:ident $pathLit:str => $_:ident $[limit $_:num]?) := r.ref then

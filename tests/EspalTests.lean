@@ -19,7 +19,10 @@ import EspalTests.JsonDeriveRecursive
 import EspalTests.JsonProblem
 import EspalTests.LinkUrl
 import EspalTests.Lint
+import EspalTests.ReadOnly
+import EspalTests.Redirect
 import EspalTests.Route
 import EspalTests.RouteTable
+import EspalTests.Secret
 import EspalTests.Serve
 import EspalTests.Statements
