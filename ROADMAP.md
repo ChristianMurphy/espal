@@ -125,10 +125,13 @@ Each property names the evidence behind it, using the kinds above.
 | [Tenant isolation](#tenant-isolation) | Proved over the model, Enforced by Postgres and SQL Server |
 | [The database matches the declared schema](#the-database-matches-the-declared-schema) | Checked at startup |
 | [Statement budget](#statement-budget) | Proved, Typed per endpoint |
+| [GET requests only read](#get-requests-only-read) | Proved for the operation, not for the SQL text |
 | [Row bounds and query cost](#row-bounds-and-query-cost) | Typed, then Tested |
 | [Time and space cost of pure code](#time-and-space-cost-of-pure-code) | Research track |
 | [Stateless handlers](#stateless-handlers) | Typed, Proved over the interpreter, Linted |
 | [Safe HTML](#safe-html) | Proved and Typed |
+| [Redirects stay on the site](#redirects-stay-on-the-site) | Typed and Proved |
+| [Secrets have no encoder](#secrets-have-no-encoder) | Typed |
 | [HTTP framing](#http-framing) | Tested |
 | [Framework totality](#framework-totality) | Linted |
 | [Overload and runtime limits](#overload-and-runtime-limits) | Enforced, Measured |
@@ -230,6 +233,12 @@ The budget has these gaps:
 - Only loops over a `List` are counted so far. A statement for each row of a result has no bound until queries carry their row limit.
 - `Costs.sent_le` covers `Eff.eval`, the interpreter that tests and proofs use. No theorem ties it to the interpreter that serves requests, which doesn't count statements at run time yet.
 
+### GET requests only read
+
+A handler reads with `query` and writes with `statement`. `ReadOnly x` says that the program `x` never asks for `statement`, and `ReadOnly.written_eq` shows that a run of such a program records no statement that may write. The `api` command proves `ReadOnly` for the handler of every `GET` row, and refuses one that calls `statement`.
+
+The proof covers which operation a handler asks for. A `query` whose SQL text writes still passes, since the text is a string. Two later pieces close that gap. The query layer builds each statement, so its kind comes from the builder. The Postgres client can also run every `query` in a read-only transaction, which Postgres enforces.
+
 ### Row bounds and query cost
 
 Every select carries a `LIMIT` or a predicate on a unique key. Each join follows a foreign key to a unique key, so a row matches at most one row on the other side. The result then holds no more rows than the limit, and no query returns an unbounded cartesian product. We can prove that bound over the model.
@@ -263,6 +272,18 @@ Escaped text contains no `<`, `>`, `"` or `'` (`escape_safe`). A rendered page c
 The proofs assume the prototype's closed set of attributes. They also assume that links come only from routes, which rules out `javascript:` URLs.
 
 Some attributes and elements need their own escaping or validation and their own proof. These include external URLs, `style`, `on*` handlers, `srcdoc`, and the bodies of `<script>` and `<style>`. Our nesting rules can also disagree with the HTML5 parser, which closes or moves elements, for example inside tables. A test renders random trees, parses them with an HTML5 parser, and compares the result with the model's tree.
+
+### Redirects stay on the site
+
+An open redirect puts text from the request in `Location`. A `Redirect` holds a `Link`, and a handler gets a `Link` from `linkTo`, so a redirect names a route of the same table. `Link.toString_local` shows that a link's URL starts with one `/` and never with `//` or `/\\`, which a browser would read as another host.
+
+The proof is about the string Espal writes. A proxy that rewrites `Location`, or a client that treats other characters as a host, falls outside it.
+
+### Secrets have no encoder
+
+`Secret α` holds a password or a key. It has no `ToString`, `ToJson` or `ToReply` instance, so code that logs it, encodes it or answers with it fails to compile. A request body that holds one derives `JsonDecode`, which writes a decoder and no encoder. `Secret.reveal` gives the value back, and the [route report](#route-report-and-escape-hatches) can list its callers.
+
+Nothing stops code from revealing a secret and then logging the plain value. The type prevents the accident, and a search for `reveal` finds the rest.
 
 ### HTTP framing
 
