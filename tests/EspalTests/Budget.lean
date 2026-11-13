@@ -349,4 +349,38 @@ def limit : Nat :=
 
 #guard limit + 1 == 4
 
+/-! ## The route report
+
+`#routes` lists each row with the budget its handler has, inferred or pinned, and the row's limit.
+Pinning the report in a test makes a change to an inferred budget fail the build. -/
+
+def greeting (_ : Public) : Text :=
+  "hello"
+
+api Reported (limit := 20) where
+  GET "/users/:id" => find
+  PUT "/users/:id" => rename
+  GET "/unmarked" => unmarked
+  GET "/branchy/:id" => branchy limit 3
+  GET "/twice/:id" => twice
+  GET "/eleven" => eleven
+  GET "/greeting" => greeting
+
+/--
+info: method  path          handler               budget  limit
+GET     /users/:id    BudgetTests.find      2       20
+PUT     /users/:id    BudgetTests.rename    2       20
+GET     /unmarked     BudgetTests.unmarked  1       20
+GET     /branchy/:id  BudgetTests.branchy   3       3
+GET     /twice/:id    BudgetTests.twice     4       20
+GET     /eleven       BudgetTests.eleven    11      20
+GET     /greeting     BudgetTests.greeting  -       20
+-/
+#guard_msgs in
+#routes Reported
+
+/-- error: `BudgetTests.limit` isn't a table that an `api` command declared. -/
+#guard_msgs in
+#routes limit
+
 end BudgetTests

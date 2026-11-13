@@ -317,7 +317,9 @@ meta initialize
               pure none
             | _ =>
               throwError "expected `budget` or `budget n`, with `n` a number of statements"
-          discard <| (prove declName pinned?).run' }
+          discard <| (prove declName pinned?).run'
+          -- Hovering the attribute shows the theorem it declared, with the proved bound.
+          Elab.addConstInfo stx (declName ++ `budget) }
 
 end Budget
 

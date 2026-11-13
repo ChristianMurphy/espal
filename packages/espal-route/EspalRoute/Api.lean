@@ -53,6 +53,9 @@ its own with `limit n` after the handler, a table states one for its rows with
 `api Name (limit := n) where`, and otherwise the option `espal.statementLimit` applies, which is 10
 unless the app sets it. The command checks the handler's `budget` theorem, or infers the budget
 when the handler has none.
+
+`#routes Name` lists a table's rows with each handler's budget and the row's limit. Hovering a
+row's path shows the handler's `budget` theorem.
 -/
 
 @[expose] public section
@@ -409,6 +412,65 @@ public meta def elabLinksTo : Term.TermElab := fun stx _ => do
         return kept.foldr (fun type acc => mkForall `_ .default type acc) (mkConst ``Espal.Link)
   mkAppOptM ``Espal.LinkTo #[none, mkConst handler, fnType]
 
+/-- What the route report shows for one row of a table. -/
+meta structure RouteInfo where
+  /-- The method as the row writes it, such as `GET`. -/
+  method : String
+  /-- The path as the row writes it. -/
+  path : String
+  /-- The handler. -/
+  handler : Name
+  /-- The row's limit on database statements. -/
+  limit : Nat
+  deriving Inhabited
+
+/-- The rows of each table that an `api` command declared, by the table's name. -/
+meta initialize routeInfoExt :
+  SimplePersistentEnvExtension (Name × Array RouteInfo) (NameMap (Array RouteInfo)) ←
+  registerSimplePersistentEnvExtension
+      { addEntryFn := fun tables (name, rows) => tables.insert name rows
+        addImportedFn := fun imported =>
+          imported.foldl (init := {}) fun tables entries =>
+            entries.foldl (init := tables) fun tables (name, rows) => tables.insert name rows }
+
+/-- `#routes Name` lists the rows of the `api` table `Name`: each row's method, path and handler,
+the most database statements its handler can send, and the row's limit. A handler that returns a
+plain value sends none and shows `-`. -/
+syntax (name := routesCmd) "#routes " ident : command
+
+/-- `text` padded with spaces to `width`. -/
+private meta def padTo (text : String) (width : Nat) : String :=
+  text ++ String.ofList (List.replicate (width - text.length) ' ')
+
+/-- The `#routes` command. -/
+@[command_elab routesCmd]
+public meta def elabRoutes : CommandElab := fun stx => do
+  let `(command| #routes $tableId:ident) := stx
+    | throwUnsupportedSyntax
+  let table ← liftCoreM <| realizeGlobalConstNoOverloadWithInfo tableId
+  let some rows := (routeInfoExt.getState (← getEnv)).find? table
+    |
+    throwErrorAt
+        tableId m!"`{privateToUserName table}` isn't a table that an `api` command \
+        declared."
+  let lines ←
+    rows.mapM fun row => do
+        let budget ← liftTermElabM <| liftM <| Espal.Budget.stated? row.handler
+        let handler := toString (privateToUserName row.handler).eraseMacroScopes
+        let budgetText := (budget.map toString).getD "-"
+        pure (row.method, row.path, handler, budgetText, toString row.limit)
+  let width (pick : String × String × String × String × String → String) (title : String) : Nat :=
+    lines.foldl (init := title.length) fun widest line => max widest (pick line).length
+  let methodWidth := width (·.1) "method"
+  let pathWidth := width (·.2.1) "path"
+  let handlerWidth := width (·.2.2.1) "handler"
+  let budgetWidth := width (·.2.2.2.1) "budget"
+  let render (line : String × String × String × String × String) : String :=
+    s!"{padTo line.1 methodWidth}  {padTo line.2.1 pathWidth}  {padTo line.2.2.1 handlerWidth}  \
+      {padTo line.2.2.2.1 budgetWidth}  {line.2.2.2.2}"
+  let header := render ("method", "path", "handler", "budget", "limit")
+  logInfo ("\n".intercalate (header :: (lines.map render).toList))
+
 elab_rules : command
   | `(command| api $apiId:ident $[(limit := $tableLimit?:num)]? where $rows*) => do
     let apiName := apiId.getId
@@ -459,6 +521,10 @@ elab_rules : command
     for r in rowsArr do
       let rowLimit := r.limit?.getD tableLimit
       withRef r.ref <| liftTermElabM <| liftM <| Espal.Budget.ensure r.handler rowLimit
+      -- Hovering a row's path shows the handler's proved budget.
+      if (← getEnv).contains (r.handler ++ `budget) then
+        if let `(apiRoute| $_:ident $pathLit:str => $_:ident $[limit $_:num]?) := r.ref then
+          liftTermElabM <| Term.addTermInfo' pathLit (← mkConstWithLevelParams (r.handler ++ `budget))
     -- The `PathTo` and `LinkTo` instances come before the table, so a handler in it can take one
     -- as an instance argument and link to another row.
     for r in rowsArr do
@@ -512,6 +578,14 @@ elab_rules : command
            links_disjoint := by
             rw [← Espal.Route.keysDisjoint_map_routeKey]
             decide +kernel } : Espal.Api Espal.Endpoint))
+    -- The rows, for `#routes`.
+    let declared ← liftCoreM <| realizeGlobalConstNoOverload apiId
+    modifyEnv fun env =>
+      routeInfoExt.addEntry env
+        (declared,
+          rowsArr.map fun r =>
+            { method := r.methodText, path := r.path, handler := r.handler
+              limit := r.limit?.getD tableLimit })
     -- The theorems for `pathTo` and `linkTo`, for each handler.
     for hidx : idx in [0:rowsArr.size] do
       let r := rowsArr[idx]
