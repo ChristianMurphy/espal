@@ -48,8 +48,11 @@ A handler can link to another row of its own table. It takes that row's `LinkTo`
 instance as an instance argument, and the command fills it when it builds the table.
 `[links_to% h]` writes the `LinkTo` argument for the handler `h`.
 
-A handler that returns a program must send at most 10 database statements. The command checks
-the handler's `@[budget n]` theorem, or proves the bound itself when the handler has none.
+A handler that returns a program must stay within a limit on database statements. A row states
+its own with `limit n` after the handler, a table states one for its rows with
+`api Name (limit := n) where`, and otherwise the option `espal.statementLimit` applies, which is 10
+unless the app sets it. The command checks the handler's `budget` theorem, or infers the budget
+when the handler has none.
 -/
 
 @[expose] public section
@@ -144,11 +147,12 @@ namespace Espal.ApiCommand
 open Lean Elab Command Meta Routing Espal.Route
 
 /-- One row of an `api` table, with a method, a path and a handler. -/
-syntax apiRoute := ident ppSpace str " => " ident
+syntax apiRoute := ident ppSpace str " => " ident (&" limit " num)?
 
 /-- Declares an `Espal.Api` from rows of `METHOD "/path/:capture" => handler`. See the module
 docstring. -/
-syntax (name := apiCmd) "api " ident " where" many1Indent(ppLine apiRoute) : command
+syntax (name := apiCmd)
+  "api " ident (" (" &"limit" " := " num ")")? " where" many1Indent(ppLine apiRoute) : command
 
 /-- The methods a row can name, with their `Std.Http.Method` constructors. -/
 private meta def methods : List (String × Name) :=
@@ -190,6 +194,8 @@ private meta def parsePath (path : String) : Except String (List RawSeg) := do
 /-- What the `api` command needs from one row, once its handler's signature is read. -/
 private meta structure Row where
   ref : Syntax
+  /-- The row's own statement limit, if it states one. -/
+  limit? : Option Nat
   methodText : String
   method : Name
   path : String
@@ -404,11 +410,11 @@ public meta def elabLinksTo : Term.TermElab := fun stx _ => do
   mkAppOptM ``Espal.LinkTo #[none, mkConst handler, fnType]
 
 elab_rules : command
-  | `(command| api $apiId:ident where $rows*) => do
+  | `(command| api $apiId:ident $[(limit := $tableLimit?:num)]? where $rows*) => do
     let apiName := apiId.getId
     let mut parsed : Array Row := #[]
     for row in rows do
-      let `(apiRoute| $methodId:ident $pathLit:str => $handlerId:ident) := row
+      let `(apiRoute| $methodId:ident $pathLit:str => $handlerId:ident $[limit $rowLimit?:num]?) := row
         | throwUnsupportedSyntax
       let methodText := methodId.getId.toString
       let some (_, method) := methods.find? (·.1 == methodText)
@@ -429,7 +435,8 @@ elab_rules : command
         | .ok segs => pure segs
         | .error msg => throwErrorAt pathLit msg
       parsed := parsed.push
-        { ref := row, methodText, method, path, handler, segs, args := sig.args
+        { ref := row, limit? := rowLimit?.map (·.getNat), methodText, method, path, handler, segs
+          args := sig.args
           callArgs := sig.callArgs, queries := sig.queries, queryTypes? := sig.queryTypes?
           body? := sig.body? }
     -- The check `linksDisjoint` makes, run here so the error names both routes.
@@ -442,9 +449,16 @@ elab_rules : command
           throwErrorAt later.ref m!"{earlier.display} accepts links built for the later \
             route {later.display}.\nThose links would reach the wrong handler. Change one of \
             the two paths."
-    -- Every handler that returns a program has a proved statement budget within the limit.
+    -- Every handler that returns a program has a proved statement budget within its limit: the
+    -- row's own, else the table's, else the `espal.statementLimit` option.
+    let options ← getOptions
+    let tableLimit :=
+      match tableLimit? with
+      | some n => n.getNat
+      | none => Espal.Budget.statementLimit.get options
     for r in rowsArr do
-      withRef r.ref <| liftTermElabM <| Espal.Budget.ensure r.handler Espal.Budget.defaultLimit
+      let rowLimit := r.limit?.getD tableLimit
+      withRef r.ref <| liftTermElabM <| liftM <| Espal.Budget.ensure r.handler rowLimit
     -- The `PathTo` and `LinkTo` instances come before the table, so a handler in it can take one
     -- as an instance argument and link to another row.
     for r in rowsArr do
