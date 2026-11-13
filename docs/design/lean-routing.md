@@ -29,7 +29,7 @@ Espal builds its routes on [lean-routing](https://github.com/paulbutcher/lean-ro
 
 ## Changes offered upstream
 
-Espal needs one change to lean-routing, described under [the universe change](#the-universe-change). The trial also led to pull requests that help its other users, and the [upstream plan](https://github.com/ChristianMurphy/espal/blob/explore/lean-routing/explorations/lean-routing/upstream/README.md) records how each began. lean-routing 0.11.0 shipped the first four.
+Espal needed one change to lean-routing, described under [the universe change](#the-universe-change). The trial also led to pull requests that help its other users, and the [upstream plan](https://github.com/ChristianMurphy/espal/blob/explore/lean-routing/explorations/lean-routing/upstream/README.md) records how each began. lean-routing 0.11.0 shipped the first four.
 
 - [#10](https://github.com/paulbutcher/lean-routing/pull/10) proves that a link from `linkFor` reaches its handler, given one fuzzed assumption about Std.Http's parser and decoder. The theorem sits in lean-routing's tests, so Espal still proves its own [route round trip](../../ROADMAP.md#route-round-trip). [lean4#15834](https://github.com/leanprover/lean4/issues/15834) asks Lean to add the `ByteArray` fold lemma that its proof needed.
 - [#11](https://github.com/paulbutcher/lean-routing/pull/11) matches requests with a trie. The maintainer welcomed one in [#8](https://github.com/paulbutcher/lean-routing/issues/8) if it kept the formal guarantees, and theorems prove that it picks the route `matchTable` picks.
@@ -41,7 +41,7 @@ Espal needs one change to lean-routing, described under [the universe change](#t
 
 ## The universe change
 
-A handler returns its effects as a program, and Espal's program type lives in `Type 1`. lean-routing's `Route` held only results in `Type`, so a table of such handlers didn't type-check. [#22](https://github.com/paulbutcher/lean-routing/pull/22) lets `Route` hold a result in any universe, and is open. Until a release includes it, Espal's `espal-route` package depends on the same commit in [a fork](https://github.com/ChristianMurphy/lean-routing).
+A handler returns its effects as a program, and Espal's program type lives in `Type 1`. lean-routing's `Route` held only results in `Type`, so a table of such handlers didn't type-check. [#22](https://github.com/paulbutcher/lean-routing/pull/22) lets `Route` hold a result in any universe. lean-routing 0.15.3 shipped it in November 2026, and Espal depends on that release.
 
 ## If lean-routing stalls
 
