@@ -363,7 +363,12 @@ meta def walk (claim : Claim) (self? : Option Name) (program : Expr) :
         let goal ← mkFreshExprSyntheticOpaqueMVar (← claim.type layer program bound)
         let .mvar goalId := goal
           | lost program
-        let cases ← (Tactic.run goalId (Tactic.evalTactic (← `(tactic| split)))).run'
+        let cases ←
+          try
+            (Tactic.run goalId (Tactic.evalTactic (← `(tactic| split)))).run'
+          catch _ =>
+            throwError m!"Lean can't split{indentExpr program}\nThat happens for an array pattern \
+              such as `#[a]`. Read the cell with `row[0]?` and match on what it gives."
         for case in cases do
           case.withContext do
               let caseType ← instantiateMVars (← case.getType)

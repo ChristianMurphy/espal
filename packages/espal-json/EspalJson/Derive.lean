@@ -32,6 +32,10 @@ field needs it.
 A field whose type is the type being derived, or an `Array`, `List` or `Option` of it, makes the
 codec recursive. Its decoder counts down from the depth of the input, as `EspalJson.Recursive`
 describes. The handler can't yet take a type with indices.
+
+`deriving JsonDecode` writes only the decoder, for a structure without parameters. A request body
+that holds a value with no encoder, such as a `Secret`, derives it. The decoder reads fields,
+decides checks and reports unknown keys as the one from `deriving Json` does.
 -/
 
 public section
@@ -927,6 +931,71 @@ meta def mkCommands (declName : Name) : TermElabM (Array Command) := do
             RecShape }
       recursiveCommands declName ps true recShapes
 
+/-- Stops the derivation of a decoder with a reason. -/
+meta def refuseDecode {α : Type} (declName : Name) (reason : MessageData) : MetaM α :=
+  throwError m!"cannot derive JsonDecode for {.ofConstName declName}: {reason}"
+
+open TSyntax.Compat in
+/--
+The commands for `deriving JsonDecode`, which writes a structure's decoder and no encoder. It is
+for a request body that holds a value with no encoder, such as a `Secret`.
+-/
+meta def decodeCommands (declName : Name) : TermElabM (Array Command) := do
+  let info ← getConstInfoInduct declName
+  unless isStructure (← getEnv) declName && info.numParams == 0 && info.numIndices == 0 do
+    refuseDecode declName "the handler takes a structure without parameters"
+  let (data, proofs) ← splitFields declName
+  withParams declName fun _ type =>
+      withLocalDeclD `self type fun self => do
+        for f in proofs do
+          checkDecidable declName f (← inferType (← mkProjection self f))
+        let typed ←
+          data.mapM fun f => do
+              let fieldType ← inferType (← mkProjection self f)
+              if mentions self fieldType then
+                refuseDecode declName m!"the type of {f} depends on another field"
+              if (fieldType.find? (·.isConstOf declName)).isSome then
+                refuseDecode declName m!"the field {f} contains {.ofConstName declName} itself"
+              return (f, fieldType)
+        checkKeys declName #[] typed
+        for (f, fieldType) in typed do
+          let inner ← codecType declName f fieldType
+          unless ← hasInstance ``JsonDecode inner do
+            refuseDecode declName
+                m!"the field {f} has type {inner}, which has no {.ofConstName ``JsonDecode} instance"
+  let ps : Params := { idents := #[], codecs := #[] }
+  let T := mkCIdent declName
+  let ty ← ps.applied T
+  let dec := mkIdent (← mkFreshUserName `decodeJson)
+  let pointer := mkIdent (← mkFreshUserName `pointer)
+  let fields := mkIdent (← mkFreshUserName `fields)
+  let keyed ← data.mapM fun f => return (f, ← fieldKey declName f)
+  let vars ← data.mapM fun f => return mkIdent (← mkFreshUserName f)
+  let hyps ← proofs.mapM fun f => return mkIdent (← mkFreshUserName f)
+  let reads ←
+    keyed.mapM fun (f, key, optional) => do
+        readField pointer fields key optional (← `(espal_json_field_type% $ty $(mkIdent f)))
+  let props ← proofs.mapM fun f => `(espal_json_field_type% $ty $(mkIdent f) $vars*)
+  let names := (data ++ proofs).map mkIdent
+  let values := vars ++ hyps
+  let value ← `({ $[$names:ident := $values],* })
+  let body ←
+    decodeObject pointer fields (keyed.map (·.2.1)) reads vars (proofs.zip (hyps.zip props)).toList
+      value
+  let missing := quote "expected an object"
+  return #[
+    ← `(def $dec ($pointer : List String) :
+          _root_.Json → Except (Array Espal.DecodeError) $ty
+        | .obj $fields => $body
+        | _ => .error #[⟨$pointer, $missing⟩]),
+    ← `(instance : Espal.JsonDecode $ty := ⟨$dec⟩)]
+
+/-- Handles `deriving JsonDecode` for one type. -/
+meta def decodeHandler (declNames : Array Name) : CommandElabM Bool := do
+  let #[declName] := declNames | return false
+  (← liftTermElabM <| decodeCommands declName).forM elabCommand
+  return true
+
 /-- Handles `deriving Json` for one type. -/
 meta def jsonHandler (declNames : Array Name) : CommandElabM Bool := do
   let #[declName] := declNames | return false
@@ -935,5 +1004,8 @@ meta def jsonHandler (declNames : Array Name) : CommandElabM Bool := do
 
 meta initialize
   registerDerivingHandler ``_root_.Json jsonHandler
+
+meta initialize
+  registerDerivingHandler ``Espal.JsonDecode decodeHandler
 
 end Espal.Deriving
