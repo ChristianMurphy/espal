@@ -69,7 +69,7 @@ def respond (database : Database) (program : Eff Reply) : ContextAsync (Response
           do
             IO.eprintln s!"request failed: {error}"
             pure Reply.internalError :
-        IO Reply)
+        Async Reply)
   reply.toResponse
 
 /-- The response of `endpoint` to `request`. A route that takes a body reads at most `maxBody`

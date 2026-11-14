@@ -77,9 +77,15 @@ public def isGeneratedCtorIdx (env : Environment) (n : Name) : Bool :=
 /--
 Declarations allowed to run code that Lean never checks, through `@[implemented_by]` or
 `@[extern]`. Add one only with a test that compares its code with the definition it replaces.
+A binding to a C library replaces no definition, so its test runs it against the real system.
+
+The four `Espal.Postgres.Raw` functions are the libpq binding. `lake exe postgres-test` in `tests/`
+runs them against a Postgres server.
 -/
 public def uncheckedAllowed : NameSet :=
-  {}
+  NameSet.empty |>.insert `Espal.Postgres.Raw.connect |>.insert `Espal.Postgres.Raw.send |>.insert
+      `Espal.Postgres.Raw.next |>.insert
+    `Espal.Postgres.Raw.close
 
 /-- Problems with one declaration, as human-readable messages. -/
 public def check (env : Environment) (n : Name) (ci : ConstantInfo) : Array String :=

@@ -9,5 +9,6 @@ public import EspalJobs
 public import EspalJson
 public import EspalModel
 public import EspalPage
+public import EspalPostgres
 public import EspalQuery
 public import EspalRoute

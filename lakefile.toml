@@ -24,6 +24,10 @@ name = "espal-http"
 path = "packages/espal-http"
 
 [[require]]
+name = "espal-postgres"
+path = "packages/espal-postgres"
+
+[[require]]
 name = "espal-query"
 path = "packages/espal-query"
 
