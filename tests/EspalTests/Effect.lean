@@ -69,10 +69,11 @@ example (world : World) : (twoLines.eval world).2.logs = world.logs ++ ["a", "b"
 #eval
   show IO Unit from do
     let (t, roll) ←
-      (do
-            let t ← now
-            let roll ← random 3 3
-            return (t, roll) : Eff (Nat × Nat)).run
+      Std.Async.Async.block
+          (do
+              let t ← now
+              let roll ← random 3 3
+              return (t, roll) : Eff (Nat × Nat)).run
     unless t > 1700000000000 && roll == 3 do
       throw (IO.userError s!"the machine answered {t} and {roll}")
 

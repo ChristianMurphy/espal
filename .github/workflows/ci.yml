@@ -19,10 +19,32 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # `lake exe postgres-test` runs espal-postgres against this server. The password protects
+    # nothing, since the server lives only for this job.
+    services:
+      postgres:
+        image: postgres:16.15@sha256:f9a7b9ebf6f56201f949db745e47bc423c0f0f8294bafe991cc10bf74b029657
+        env:
+          POSTGRES_USER: espal_test
+          POSTGRES_PASSWORD: espal_test
+          POSTGRES_DB: espal_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U espal_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # espal-postgres compiles a C binding against libpq's headers and links the shared library.
+      - name: Install libpq
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libpq-dev
 
       # Builds with warnings as errors, runs `lake test` and `lake lint`, and re-checks every
       # declaration with Lean's kernel checker. lean-action's nanoda step expects a `[package]`
@@ -35,6 +57,13 @@ jobs:
           test: "true"
           lint: "true"
           leanchecker: "true"
+
+      # `lake test` needs no services, so the tests against a real server run here.
+      - name: Test espal-postgres against Postgres
+        working-directory: tests
+        env:
+          ESPAL_TEST_DATABASE: host=127.0.0.1 port=5432 dbname=espal_test user=espal_test password=espal_test
+        run: lake exe postgres-test
 
       # Compiles generated `api` tables of 10, 50 and 200 routes, and fails when one takes longer
       # than its budget in `scripts/CompileBench.lean`.

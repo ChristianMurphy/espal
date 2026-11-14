@@ -180,9 +180,10 @@ the request gets `500` with no detail about the cause. -/
     let uri ← parseTarget "/count"
     let body ← Async.block Body.empty
     let seen ← IO.mkRef ([] : List Statement)
-    let database : Database := fun s => do
+    let record (s : Statement) : Async Rows := do
       seen.modify (· ++ [s])
       return #[#[some "3"]]
+    let database : Database := { query := record, statement := record }
     let response ←
       Async.block <|
           ContextAsync.run do

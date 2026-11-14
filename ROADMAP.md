@@ -46,6 +46,7 @@ Each battery is its own Lake package in this repository, and each works without 
 | `espal-route` | Typed routes and links |
 | `espal-json` | Lawful and streaming JSON codecs |
 | `espal-http` | The server, request limits, admission control |
+| `espal-postgres` | The Postgres client, on libpq in pipeline mode |
 | `espal-query` | The query layer, budgets, the evaluator, dialects |
 | `espal-model` | The model attribute, migrations, fixtures |
 | `espal-page` | JSX pages, forms, partial updates |
@@ -125,7 +126,7 @@ Each property names the evidence behind it, using the kinds above.
 | [Tenant isolation](#tenant-isolation) | Proved over the model, Enforced by Postgres and SQL Server |
 | [The database matches the declared schema](#the-database-matches-the-declared-schema) | Checked at startup |
 | [Statement budget](#statement-budget) | Proved, Typed per endpoint |
-| [GET requests only read](#get-requests-only-read) | Proved for the operation, not for the SQL text |
+| [GET requests only read](#get-requests-only-read) | Proved for the operation, Enforced by Postgres for the SQL text |
 | [Row bounds and query cost](#row-bounds-and-query-cost) | Typed, then Tested |
 | [Time and space cost of pure code](#time-and-space-cost-of-pure-code) | Research track |
 | [Stateless handlers](#stateless-handlers) | Typed, Proved over the interpreter, Linted |
@@ -237,7 +238,9 @@ The budget has these gaps:
 
 A handler reads with `query` and writes with `statement`. `ReadOnly x` says that the program `x` never asks for `statement`, and `ReadOnly.written_eq` shows that a run of such a program records no statement that may write. The `api` command proves `ReadOnly` for the handler of every `GET` row, and refuses one that calls `statement`.
 
-The proof covers which operation a handler asks for. A `query` whose SQL text writes still passes, since the text is a string. Two later pieces close that gap. The query layer builds each statement, so its kind comes from the builder. The Postgres client can also run every `query` in a read-only transaction, which Postgres enforces.
+The proof covers which operation a handler asks for. A `query` whose SQL text writes still passes it, since the text is a string. Postgres closes that gap at run time. `espal-postgres` sends every `query` on a session with `default_transaction_read_only` on, and Postgres refuses a write there with SQLSTATE `25006`. A function that writes gets the same refusal when a `query` calls it. Later the query layer builds each statement, so its kind comes from the builder.
+
+A `query` and a `statement` use different sessions, and each statement commits on its own. A transaction stays on one session, so transactions need another design.
 
 ### Row bounds and query cost
 
@@ -470,7 +473,7 @@ We finished this milestone. It picked the HTTP layer, the Postgres client and th
 - The query core from [lean-linq](docs/design/lean-linq.md), with table variables that the interpreter supplies. Models declared with an attribute, the builder, and query syntax in `do` notation sit on top.
 - Statement budgets with upper bounds and `do` notation (done, as `@[budget]`). The proofs for [injection](#no-sql-injection), [tenant isolation](#tenant-isolation), [statement budgets](#statement-budget) and [row bounds](#row-bounds-and-query-cost) carry over, with batch lookups through `= ANY($1)`.
 - Collections and safe writes from the defaults.
-- The libpq client behind Espal's own client interface, with pipelining, transactions, prepared statements, and single-row mode for streamed results. Its pool waits for a reconnecting connection, where the spike's pool failed requests at once.
+- The libpq client behind Espal's own client interface, with pipelining, transactions, prepared statements, and single-row mode for streamed results. Pipelining exists, in `espal-postgres`. Its pool waits for a reconnecting connection, where the spike's pool failed requests at once.
 - A figure for the database failover target in the [performance targets](#performance-targets), once the pool waits for a reconnecting connection.
 - Migrations, seed data and fixtures generated from the models, and the [schema check at startup](#the-database-matches-the-declared-schema).
 - [Row-level security](#tenant-isolation) policies for each tenanted table.
