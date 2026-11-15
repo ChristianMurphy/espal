@@ -1,0 +1,6 @@
+spike: 52171 q/s, CPU 2 busy 78%, 14.9 us of CPU 2 per query
+espal: 40962 q/s, CPU 2 busy 98%, 23.8 us of CPU 2 per query
+spike: 50979 q/s, CPU 2 busy 78%, 15.4 us of CPU 2 per query
+espal: 45923 q/s, CPU 2 busy 97%, 21.0 us of CPU 2 per query
+spike: 50832 q/s, CPU 2 busy 80%, 15.7 us of CPU 2 per query
+espal: 40978 q/s, CPU 2 busy 97%, 23.6 us of CPU 2 per query

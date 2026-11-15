@@ -43,9 +43,10 @@ structure Refusal where
   message : String
   deriving Repr, BEq, DecidableEq
 
-/-- Connects with `conninfo`. A read-only session refuses every statement that writes. -/
+/-- Connects with `conninfo`. A read-only session refuses every statement that writes. The server
+cancels a statement that runs longer than `timeoutMs` milliseconds, unless that is zero. -/
 @[extern "espal_pq_connect"]
-opaque Raw.connect (conninfo : @& String) (readOnly : Bool) : IO Raw
+opaque Raw.connect (conninfo : @& String) (readOnly : Bool) (timeoutMs : UInt32) : IO Raw
 
 /-- Sends one statement and returns without its result. -/
 @[extern "espal_pq_send"]
