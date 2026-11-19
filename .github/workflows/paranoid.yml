@@ -35,7 +35,56 @@ jobs:
           sudo apt-get install -y -q bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
-      # Replays the export through Lean's kernel and through leanchecker-paranoid, lean4lean,
-      # nanoda, con-leche and con-ron, which `lake check` in `ci.yml` leaves out.
-      - name: Replay the export with every bundled checker
-        run: lake check --paranoid
+      # Builds and exports Espal in a bubblewrap sandbox, replays the export through Lean's kernel,
+      # and fails on any axiom beyond the standard three.
+      - name: Replay the export with lake check
+        run: lake check
+
+      # `lake check --paranoid` runs the other bundled checkers as one step, and reports a checker
+      # that crashes as one that rejects. The steps below run each checker on its own, with the
+      # commands `lake check --paranoid` uses, so each has its own result. This export is made
+      # outside the sandbox, which the step above already covers.
+      - name: Export Espal
+        run: |
+          echo "LEAN_BIN=$(lean --print-prefix)/bin" >> "$GITHUB_ENV"
+          lake env "$(lean --print-prefix)/bin/leanexport" Espal > "$RUNNER_TEMP/espal.ndjson"
+
+      - name: Replay with Lean's kernel in paranoid mode
+        if: ${{ !cancelled() }}
+        run: |
+          "$LEAN_BIN/leanchecker-paranoid" --silent --from-export "$RUNNER_TEMP/espal.ndjson"
+
+      - name: Replay with lean4lean
+        if: ${{ !cancelled() }}
+        run: |
+          "$LEAN_BIN/lean4lean" --import "$RUNNER_TEMP/espal.ndjson"
+
+      # nanoda 0.4.19, which Lean 4.35.0 bundles, overflows its stack on
+      # `Json.Parser.stringStep.fun_cases_unfolding` from lean-json. The other checkers accept
+      # that theorem. ammkrn/nanoda_lib#77 describes the cause, and leanprover/lean4#16290 asks
+      # Lean to bundle a nanoda with a stack setting. This step fails until one of them lands.
+      - name: Replay with nanoda
+        if: ${{ !cancelled() }}
+        run: |
+          cat > "$RUNNER_TEMP/nanoda.json" <<EOF
+          {
+            "use_stdin": false,
+            "export_file_path": "$RUNNER_TEMP/espal.ndjson",
+            "permitted_axioms": ["propext", "Classical.choice", "Quot.sound"],
+            "unpermitted_axiom_hard_error": false,
+            "num_threads": 4,
+            "nat_extension": true,
+            "string_extension": true
+          }
+          EOF
+          "$LEAN_BIN/nanoda_bin" "$RUNNER_TEMP/nanoda.json"
+
+      - name: Replay with con-leche
+        if: ${{ !cancelled() }}
+        run: |
+          "$LEAN_BIN/con-leche" "$RUNNER_TEMP/espal.ndjson"
+
+      - name: Replay with con-ron
+        if: ${{ !cancelled() }}
+        run: |
+          "$LEAN_BIN/con-ron" "$RUNNER_TEMP/espal.ndjson"
