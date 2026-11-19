@@ -21,6 +21,10 @@ next handler that reaches its slot, and handlers that reach the slot meanwhile w
 connection. The statements that were on the lost connection fail, and the pool doesn't send them
 again, since a write may already have run.
 
+Postgres cancels a statement that runs past the pool's time limit. The limit is the server's, so
+it doesn't cover a network that stops answering. libpq's keepalive settings in the connection
+string cover that.
+
 Each statement commits on its own. A `query` and a `statement` in one request use different
 sessions, which a transaction can't span, so transactions need another design.
 -/
@@ -45,6 +49,8 @@ structure Pool where
   writers : Array Slot
   /-- Counts statements, to take connections in turn. -/
   turn : IO.Ref Nat
+  /-- The most milliseconds one statement may run before Postgres cancels it. Zero sets no limit. -/
+  timeoutMs : UInt32
 
 /-- The connection in `slot`, replaced first if it was lost. Other handlers wait meanwhile. -/
 def Pool.connection (pool : Pool) (slot : Slot) (readOnly : Bool) : IO Connection := do
@@ -53,7 +59,7 @@ def Pool.connection (pool : Pool) (slot : Slot) (readOnly : Bool) : IO Connectio
         if let some connection := (← get) then
           if ← connection.usable then
             return Except.ok connection
-        match ← (Connection.connect pool.conninfo.reveal readOnly).toBaseIO with
+        match ← (Connection.connect pool.conninfo.reveal readOnly pool.timeoutMs).toBaseIO with
         | .ok connection =>
           set (some connection)
           return .ok connection
@@ -75,12 +81,16 @@ def Pool.run (pool : Pool) (slots : Array Slot) (readOnly : Bool) (s : Statement
     throw (IO.userError s!"Postgres refused a statement ({refusal.state}): {refusal.message}")
 
 /-- Connects `size` read-only sessions and `size` ordinary ones. It fails when the server can't be
-reached, so a wrong connection string stops the program at startup. -/
-def Pool.connect (conninfo : Secret String) (size : Nat := 4) : IO Pool := do
+reached, so a wrong connection string stops the program at startup. Postgres cancels a statement
+that runs longer than `timeoutMs` milliseconds, with SQLSTATE `57014`, and the session stays
+usable. The default is the five seconds a request gets. -/
+def Pool.connect (conninfo : Secret String) (size : Nat := 4) (timeoutMs : UInt32 := 5000) :
+    IO Pool := do
   let fill (readOnly : Bool) : IO (Array Slot) :=
     (Array.range (max size 1)).mapM fun _ => do
-      Std.Mutex.new (some (← Connection.connect conninfo.reveal readOnly))
-  return { conninfo, readers := ← fill true, writers := ← fill false, turn := ← IO.mkRef 0 }
+      Std.Mutex.new (some (← Connection.connect conninfo.reveal readOnly timeoutMs))
+  return { conninfo, readers := ← fill true, writers := ← fill false, turn := ← IO.mkRef 0,
+           timeoutMs }
 
 /-- The `Database` that sends `query` to the read-only sessions and `statement` to the others. -/
 def Pool.database (pool : Pool) : Database :=

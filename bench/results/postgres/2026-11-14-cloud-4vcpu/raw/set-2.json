@@ -1,0 +1,92 @@
+[
+  {
+    "variant": "spike",
+    "conns": 1,
+    "workers": 1,
+    "queries": 54094,
+    "seconds": 5.098242,
+    "queries_per_second": 10610,
+    "client_cpu_us_per_query": 78.6,
+    "output": "row for 42: (42, 9310)\nlibpq conns=1 workers=1: 54094 queries in 5.098242s = 10610.000000 q/s"
+  },
+  {
+    "variant": "espal",
+    "conns": 1,
+    "workers": 1,
+    "queries": 37122,
+    "seconds": 5.060525,
+    "queries_per_second": 7336,
+    "client_cpu_us_per_query": 114.9,
+    "output": "espal-postgres conns=1 workers=1: 37122 queries in 5.060525s = 7336.000000 q/s"
+  },
+  {
+    "variant": "bare",
+    "conns": 1,
+    "workers": 1,
+    "queries": 97672,
+    "seconds": 5.01,
+    "queries_per_second": 19495,
+    "client_cpu_us_per_query": 19.7,
+    "output": "bare-libpq conns=1 depth=1: 97672 queries in 5.01s = 19491 q/s"
+  },
+  {
+    "variant": "spike",
+    "conns": 1,
+    "workers": 256,
+    "queries": 119642,
+    "seconds": 5.106066,
+    "queries_per_second": 23431,
+    "client_cpu_us_per_query": 59.9,
+    "output": "row for 42: (42, 9310)\nlibpq conns=1 workers=256: 119642 queries in 5.106066s = 23431.000000 q/s"
+  },
+  {
+    "variant": "espal",
+    "conns": 1,
+    "workers": 256,
+    "queries": 118454,
+    "seconds": 5.122265,
+    "queries_per_second": 23125,
+    "client_cpu_us_per_query": 64.1,
+    "output": "espal-postgres conns=1 workers=256: 118454 queries in 5.122265s = 23125.000000 q/s"
+  },
+  {
+    "variant": "bare",
+    "conns": 1,
+    "workers": 256,
+    "queries": 213274,
+    "seconds": 5.02,
+    "queries_per_second": 42485,
+    "client_cpu_us_per_query": 11.8,
+    "output": "bare-libpq conns=1 depth=256: 213274 queries in 5.02s = 42490 q/s"
+  },
+  {
+    "variant": "spike",
+    "conns": 4,
+    "workers": 256,
+    "queries": 276634,
+    "seconds": 5.239211,
+    "queries_per_second": 52801,
+    "client_cpu_us_per_query": 31.3,
+    "output": "row for 42: (42, 9310)\nlibpq conns=4 workers=256: 276634 queries in 5.239211s = 52801.000000 q/s"
+  },
+  {
+    "variant": "espal",
+    "conns": 4,
+    "workers": 256,
+    "queries": 234016,
+    "seconds": 5.169285,
+    "queries_per_second": 45270,
+    "client_cpu_us_per_query": 39.5,
+    "output": "espal-postgres conns=4 workers=256: 234016 queries in 5.169285s = 45270.000000 q/s"
+  },
+  {
+    "variant": "bare",
+    "conns": 4,
+    "workers": 256,
+    "queries": 217611,
+    "seconds": 5.04,
+    "queries_per_second": 43177,
+    "client_cpu_us_per_query": 11.8,
+    "output": "bare-libpq conns=4 depth=64: 217611 queries in 5.04s = 43144 q/s"
+  }
+]
