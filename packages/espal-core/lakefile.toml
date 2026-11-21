@@ -4,6 +4,11 @@ description = "Limits, the route report, problem details and shared types for Es
 license = "Apache-2.0"
 defaultTargets = ["EspalCore"]
 
+[[require]]
+name = "lean-linq"
+git = "https://github.com/palladin/lean-linq"
+rev = "96093f6054838b2654a2391e4ab67e89caccd0b8"
+
 [[lean_lib]]
 name = "EspalCore"
 leanOptions = { autoImplicit = false, linter.missingDocs = true }
