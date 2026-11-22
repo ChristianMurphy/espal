@@ -5,7 +5,7 @@ Authors: Christian Murphy
 -/
 module
 
-public import EspalCore.Graded.Freer
+public import LeanLinq.Freer
 
 /-!
 # Effects as data
@@ -22,7 +22,7 @@ handler's result therefore depends only on the program and on what the `World` a
 it by following the program's structure, and `Costs.sent_le` shows that a run against any `World`
 stays within a proved bound.
 
-The program type is lean-linq's `FreerD`, copied into `EspalCore.Graded`. lean-linq carries a cost
+The program type is lean-linq's `FreerD`, from `LeanLinq.Freer`. lean-linq carries a cost
 bound in the program's type. Espal leaves that index empty and proves `Costs` beside the handler,
 so `Eff` is an ordinary monad.
 
