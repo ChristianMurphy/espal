@@ -75,9 +75,10 @@ def Connection.read (connection : Connection) : BaseIO Unit := do
   connection.ended.resolve ()
 
 /-- Connects and starts the task that reads results. -/
-def Connection.connect (conninfo : String) (readOnly : Bool) : IO Connection := do
+def Connection.connect (conninfo : String) (readOnly : Bool) (timeoutMs : UInt32) : IO Connection :=
+  do
   let connection : Connection :=
-    { raw := ← Raw.connect conninfo readOnly
+    { raw := ← Raw.connect conninfo readOnly timeoutMs
       waiting := ← Std.Mutex.new ∅
       broken := ← IO.mkRef false
       ended := ← IO.Promise.new }

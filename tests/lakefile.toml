@@ -19,3 +19,7 @@ leanOptions = { autoImplicit = false, warningAsError = true }
 [[lean_exe]]
 name = "postgres-test"
 root = "PostgresTest"
+
+[[lean_exe]]
+name = "postgres-bench"
+root = "PostgresBench"

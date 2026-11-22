@@ -2,14 +2,16 @@
 // result of each statement in the order they were sent. Request handlers call espal_pq_send.
 //
 // libpq allows one thread at a time on a PGconn, so a mutex guards every libpq call. The reader
-// waits in poll() without the mutex, on the socket and on an eventfd. A sender and a close write
-// to the eventfd to wake it. The reader also waits on the socket while no statement is in flight,
-// so it notices a connection that the server closed before a handler tries to use it.
+// waits in poll() without the mutex, on the socket and on an eventfd. A reply wakes it through the
+// socket. A close writes to the eventfd to wake it, and so does a sender that took input off the
+// socket itself. The reader also waits on the socket while no statement is in flight, so it
+// notices a connection that the server closed before a handler tries to use it.
 #include <lean/lean.h>
 #include <libpq-fe.h>
 #include <poll.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/eventfd.h>
@@ -54,8 +56,18 @@ static void pq_wake(pq_t *pq) {
   (void)ignored;
 }
 
-// Connects, optionally makes the session read-only, and enters pipeline mode.
-LEAN_EXPORT lean_obj_res espal_pq_connect(b_lean_obj_arg conninfo, uint8_t read_only) {
+// Runs one setting on a new connection. Returns whether the server accepted it.
+static int pq_set(PGconn *conn, const char *sql) {
+  PGresult *r = PQexec(conn, sql);
+  int ok = PQresultStatus(r) == PGRES_COMMAND_OK;
+  PQclear(r);
+  return ok;
+}
+
+// Connects, optionally makes the session read-only, sets the time limit for each statement in
+// milliseconds unless it is zero, and enters pipeline mode.
+LEAN_EXPORT lean_obj_res espal_pq_connect(b_lean_obj_arg conninfo, uint8_t read_only,
+                                          uint32_t timeout_ms) {
   pthread_once(&pq_class_once, pq_register);
   PGconn *conn = PQconnectdb(lean_string_cstr(conninfo));
   if (PQstatus(conn) != CONNECTION_OK) {
@@ -63,15 +75,13 @@ LEAN_EXPORT lean_obj_res espal_pq_connect(b_lean_obj_arg conninfo, uint8_t read_
     PQfinish(conn);
     return e;
   }
-  if (read_only) {
-    PGresult *r = PQexec(conn, "SET default_transaction_read_only = on");
-    if (PQresultStatus(r) != PGRES_COMMAND_OK) {
-      lean_obj_res e = io_error(PQerrorMessage(conn));
-      PQclear(r);
-      PQfinish(conn);
-      return e;
-    }
-    PQclear(r);
+  char limit[64];
+  snprintf(limit, sizeof limit, "SET statement_timeout = %u", (unsigned)timeout_ms);
+  if ((read_only && !pq_set(conn, "SET default_transaction_read_only = on")) ||
+      (timeout_ms > 0 && !pq_set(conn, limit))) {
+    lean_obj_res e = io_error(PQerrorMessage(conn));
+    PQfinish(conn);
+    return e;
   }
   if (!PQenterPipelineMode(conn) || PQsetnonblocking(conn, 1) != 0) {
     lean_obj_res e = io_error(PQerrorMessage(conn));
@@ -123,19 +133,24 @@ LEAN_EXPORT lean_obj_res espal_pq_send(b_lean_obj_arg obj, b_lean_obj_arg sql,
     return e;
   }
   pq->inflight++;
-  int f;
+  int f, took_input = 0;
   while ((f = PQflush(pq->conn)) == 1) {
     // The server may wait for us to read before it reads more, so take input while flushing.
     struct pollfd p = {PQsocket(pq->conn), POLLIN | POLLOUT, 0};
     if (poll(&p, 1, -1) < 0) continue;
-    if ((p.revents & POLLIN) && !PQconsumeInput(pq->conn)) {
-      f = -1;
-      break;
+    if (p.revents & POLLIN) {
+      took_input = 1;
+      if (!PQconsumeInput(pq->conn)) {
+        f = -1;
+        break;
+      }
     }
   }
   lean_obj_res result =
       f < 0 ? io_error(PQerrorMessage(pq->conn)) : lean_io_result_mk_ok(lean_box(0));
-  pq_wake(pq);
+  // The reader waits on the socket, so a reply wakes it. Input taken here no longer makes the
+  // socket readable, and a failure has no reply, so those two cases wake it by hand.
+  if (took_input || f < 0) pq_wake(pq);
   pthread_mutex_unlock(&pq->mu);
   return result;
 }

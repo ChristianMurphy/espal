@@ -176,6 +176,25 @@ def checks (pool : Pool) : IO Unit := do
   IO.sleep 500
   let rows ← run ⟨"select 1", #[]⟩
   check s!"the pool should answer after the loss, got {repr rows}" (rows == #[#[some "1"]])
+  -- Postgres cancels a statement that runs past the pool's time limit, and the session stays
+  -- usable. The default limit lets a short statement through.
+  let quick ← Pool.connect pool.conninfo (size := 1) (timeoutMs := 200)
+  let started ← IO.monoMsNow
+  let cancelled ← failure? (quick.database.query ⟨"select pg_sleep(10)", #[]⟩)
+  let waited := (← IO.monoMsNow) - started
+  let after ← (Async.block (quick.database.query ⟨"select 1", #[]⟩)).toBaseIO
+  quick.close
+  check s!"a statement past its limit should be cancelled with 57014, got {repr cancelled}"
+      ((cancelled.map (mentions · "57014")).getD false)
+  check s!"the cancel should arrive near 200 ms, and took {waited} ms" (waited < 3000)
+  match after with
+  | .ok rows =>
+    check s!"the session should answer after a cancel, got {repr rows}" (rows == #[#[some "1"]])
+  | .error error =>
+    throw (IO.userError s!"the session failed after a cancel: {error}")
+  let rows ← read ⟨"select 1 from pg_sleep(0.3)", #[]⟩
+  check s!"the default limit should let a short statement through, got {repr rows}"
+      (rows == #[#[some "1"]])
   -- A served table reads and writes through the pool.
   let added ← request database .post ["items", "served"]
   check s!"POST /items/served should add a row, got {repr added}" (added == some (200, "added 1"))

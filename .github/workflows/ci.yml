@@ -65,6 +65,14 @@ jobs:
           ESPAL_TEST_DATABASE: host=127.0.0.1 port=5432 dbname=espal_test user=espal_test password=espal_test
         run: lake exe postgres-test
 
+      # Lean links with its own toolchain, which has no sanitizer runtimes. So this builds the C
+      # binding and a stress program with the system compiler, and runs them under
+      # AddressSanitizer, UndefinedBehaviorSanitizer and ThreadSanitizer.
+      - name: Run the libpq binding under the sanitizers
+        env:
+          ESPAL_TEST_DATABASE: host=127.0.0.1 port=5432 dbname=espal_test user=espal_test password=espal_test
+        run: tests/sanitize.sh
+
       # Compiles generated `api` tables of 10, 50 and 200 routes, and fails when one takes longer
       # than its budget in `scripts/CompileBench.lean`.
       - name: Time the api command on generated tables
