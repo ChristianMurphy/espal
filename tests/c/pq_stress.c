@@ -14,7 +14,8 @@ extern void lean_initialize_runtime_module(void);
 extern void lean_initialize_thread(void);
 extern void lean_finalize_thread(void);
 extern lean_obj_res espal_pq_connect(b_lean_obj_arg conninfo, uint8_t read_only, uint32_t timeout);
-extern lean_obj_res espal_pq_send(b_lean_obj_arg conn, b_lean_obj_arg sql, b_lean_obj_arg params);
+extern lean_obj_res espal_pq_send(b_lean_obj_arg conn, b_lean_obj_arg sql, b_lean_obj_arg name,
+                                   uint8_t prepare, b_lean_obj_arg params);
 extern lean_obj_res espal_pq_next(b_lean_obj_arg conn);
 extern lean_obj_res espal_pq_close(b_lean_obj_arg conn);
 
@@ -44,15 +45,24 @@ static lean_object *connect_or_die(void) {
   return conn;
 }
 
-// Sends `sql` with one text parameter. Returns whether the send succeeded.
-static int send_one(lean_object *conn, const char *sql, const char *param) {
+// Sends `sql` with one text parameter, by the prepared statement `name` unless it is empty.
+// `prepare` prepares that statement first. Returns whether the send succeeded.
+static int send_named(lean_object *conn, const char *sql, const char *name, int prepare,
+                      const char *param) {
   lean_object *text = lean_mk_string(sql);
+  lean_object *stmt = lean_mk_string(name);
   lean_object *params = lean_mk_empty_array();
   if (param) params = lean_array_push(params, lean_mk_string(param));
-  lean_object *unit = take(espal_pq_send(conn, text, params));
+  lean_object *unit = take(espal_pq_send(conn, text, stmt, (uint8_t)prepare, params));
   lean_dec(text);
+  lean_dec(stmt);
   lean_dec(params);
   return unit != NULL;
+}
+
+// Sends `sql` with one text parameter, parsed for this one use.
+static int send_one(lean_object *conn, const char *sql, const char *param) {
+  return send_named(conn, sql, "", 0, param);
 }
 
 typedef struct {
@@ -66,7 +76,10 @@ static void *sender(void *p) {
   for (int i = 0; i < PER_SENDER; i++) {
     char number[16];
     snprintf(number, sizeof number, "%d", arg->first + i);
-    if (!send_one(arg->conn, "select $1::int", number)) die("a send failed");
+    // Half run the statement the main thread prepared, and half send the text each time.
+    int sent = i % 2 == 0 ? send_named(arg->conn, "select $1::int", "stress", 0, number)
+                          : send_one(arg->conn, "select $1::int", number);
+    if (!sent) die("a send failed");
   }
   lean_finalize_thread();
   return NULL;
@@ -113,8 +126,11 @@ static void many_senders(void) {
   lean_object *conn = connect_or_die();
   reader_arg *r = calloc(1, sizeof *r);
   r->conn = conn;
-  r->wanted = TOTAL;
+  r->wanted = TOTAL + 1;
   pthread_t reading, sending[SENDERS];
+  // Prepares the statement the senders run by name. Its answer is one more for the reader, and
+  // the value 0 it carries is also sent once by a sender.
+  if (!send_named(conn, "select $1::int", "stress", 1, "0")) die("a prepare failed");
   sender_arg args[SENDERS];
   pthread_create(&reading, NULL, reader, r);
   for (int i = 0; i < SENDERS; i++) {
@@ -124,9 +140,9 @@ static void many_senders(void) {
   }
   for (int i = 0; i < SENDERS; i++) pthread_join(sending[i], NULL);
   pthread_join(reading, NULL);
-  if (r->failed || r->answered != TOTAL) die("the reader lost answers");
+  if (r->failed || r->answered != TOTAL + 1) die("the reader lost answers");
   for (int i = 0; i < TOTAL; i++)
-    if (r->seen[i] != 1) die("a statement did not get exactly one answer");
+    if (r->seen[i] != (i == 0 ? 2 : 1)) die("a statement did not get exactly one answer");
   free(r);
   lean_dec(conn);
 }

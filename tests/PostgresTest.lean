@@ -195,6 +195,69 @@ def checks (pool : Pool) : IO Unit := do
   let rows ← read ⟨"select 1 from pg_sleep(0.3)", #[]⟩
   check s!"the default limit should let a short statement through, got {repr rows}"
       (rows == #[#[some "1"]])
+  -- A session prepares each SQL text once, however often the text runs. This pool has one
+  -- read-only session, which ends up holding a statement for each text below and for the count.
+  let single ← Pool.connect pool.conninfo (size := 1)
+  let prepared ←
+    (do
+          for _ in [0:5] do
+            for text in ["select 1", "select 2", "select $1::int + 1"] do
+              let params := if text == "select $1::int + 1" then #["1"] else #[]
+              let rows ← Async.block (single.database.query ⟨text, params⟩)
+              check s!"{text} should answer one row, got {repr rows}" (rows.size == 1)
+          Async.block
+              (single.database.query
+                ⟨"select count(*) from pg_prepared_statements where name like 'espal%'", #[]⟩) :
+        IO Rows).toBaseIO
+  -- A table that changes under a prepared statement costs one refused use, and no more.
+  let changed ←
+    (do
+          discard <| Async.block (single.database.statement ⟨"drop table if exists espal_test_plan", #[]⟩)
+          discard <| Async.block (single.database.statement ⟨"create table espal_test_plan (a int)", #[]⟩)
+          discard <| Async.block (single.database.statement ⟨"insert into espal_test_plan values (1)", #[]⟩)
+          let before ← Async.block (single.database.query ⟨"select * from espal_test_plan", #[]⟩)
+          discard <|
+              Async.block
+                (single.database.statement ⟨"alter table espal_test_plan add column b int default 2", #[]⟩)
+          let refused ← failure? (single.database.query ⟨"select * from espal_test_plan", #[]⟩)
+          let after ← Async.block (single.database.query ⟨"select * from espal_test_plan", #[]⟩)
+          discard <| Async.block (single.database.statement ⟨"drop table espal_test_plan", #[]⟩)
+          return (before, refused, after) :
+        IO (Rows × Option String × Rows)).toBaseIO
+  single.close
+  match prepared with
+  | .ok rows =>
+    check s!"the session should hold four prepared statements, got {repr rows}" (rows == #[#[some "4"]])
+  | .error error => throw (IO.userError s!"the prepared statement check failed: {error}")
+  match changed with
+  | .ok (before, refused, after) =>
+    check s!"the first read should see one column, got {repr before}" (before == #[#[some "1"]])
+    check s!"the read after the change should be refused with 0A000, got {repr refused}"
+        ((refused.map (mentions · "0A000")).getD false)
+    check s!"the next read should see both columns, got {repr after}"
+        (after == #[#[some "1", some "2"]])
+  | .error error => throw (IO.userError s!"the changed table check failed: {error}")
+
+  -- Past its limit a session parses a text on every use, and still answers.
+  let small ← Pool.connect pool.conninfo (size := 1) (maxPrepared := 2)
+  let capped ←
+    (do
+          for round in [0:2] do
+            for i in [0:5] do
+              let rows ← Async.block (small.database.query ⟨s!"select {i} + {round}", #[]⟩)
+              check s!"select {i} + {round} should answer, got {repr rows}"
+                  (rows == #[#[some (toString (i + round))]])
+          Async.block
+              (small.database.query
+                ⟨"select count(*) from pg_prepared_statements where name like 'espal%'", #[]⟩) :
+        IO Rows).toBaseIO
+  small.close
+  match capped with
+  | .ok rows =>
+    check s!"a session limited to two should hold two prepared statements, got {repr rows}"
+        (rows == #[#[some "2"]])
+  | .error error => throw (IO.userError s!"the limit check failed: {error}")
+
   -- A served table reads and writes through the pool.
   let added ← request database .post ["items", "served"]
   check s!"POST /items/served should add a row, got {repr added}" (added == some (200, "added 1"))

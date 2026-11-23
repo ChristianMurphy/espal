@@ -21,6 +21,11 @@ next handler that reaches its slot, and handlers that reach the slot meanwhile w
 connection. The statements that were on the lost connection fail, and the pool doesn't send them
 again, since a write may already have run.
 
+Each session prepares a SQL text on its first use, so Postgres parses and plans it once. When a
+table changes under a prepared statement that returns its columns, Postgres refuses the next use
+with SQLSTATE `0A000`. The session then forgets that text, and the use after that prepares it
+again.
+
 Postgres cancels a statement that runs past the pool's time limit. The limit is the server's, so
 it doesn't cover a network that stops answering. libpq's keepalive settings in the connection
 string cover that.
@@ -51,6 +56,8 @@ structure Pool where
   turn : IO.Ref Nat
   /-- The most milliseconds one statement may run before Postgres cancels it. Zero sets no limit. -/
   timeoutMs : UInt32
+  /-- The most SQL texts each session prepares. -/
+  maxPrepared : Nat
 
 /-- The connection in `slot`, replaced first if it was lost. Other handlers wait meanwhile. -/
 def Pool.connection (pool : Pool) (slot : Slot) (readOnly : Bool) : IO Connection := do
@@ -59,7 +66,7 @@ def Pool.connection (pool : Pool) (slot : Slot) (readOnly : Bool) : IO Connectio
         if let some connection := (← get) then
           if ← connection.usable then
             return Except.ok connection
-        match ← (Connection.connect pool.conninfo.reveal readOnly pool.timeoutMs).toBaseIO with
+        match ← (Connection.connect pool.conninfo.reveal readOnly pool.timeoutMs pool.maxPrepared).toBaseIO with
         | .ok connection =>
           set (some connection)
           return .ok connection
@@ -83,14 +90,15 @@ def Pool.run (pool : Pool) (slots : Array Slot) (readOnly : Bool) (s : Statement
 /-- Connects `size` read-only sessions and `size` ordinary ones. It fails when the server can't be
 reached, so a wrong connection string stops the program at startup. Postgres cancels a statement
 that runs longer than `timeoutMs` milliseconds, with SQLSTATE `57014`, and the session stays
-usable. The default is the five seconds a request gets. -/
-def Pool.connect (conninfo : Secret String) (size : Nat := 4) (timeoutMs : UInt32 := 5000) :
-    IO Pool := do
+usable. The default is the five seconds a request gets. Each session prepares up to `maxPrepared`
+SQL texts, and parses any text past that on every use. -/
+def Pool.connect (conninfo : Secret String) (size : Nat := 4) (timeoutMs : UInt32 := 5000)
+    (maxPrepared : Nat := 256) : IO Pool := do
   let fill (readOnly : Bool) : IO (Array Slot) :=
     (Array.range (max size 1)).mapM fun _ => do
-      Std.Mutex.new (some (← Connection.connect conninfo.reveal readOnly timeoutMs))
+      Std.Mutex.new (some (← Connection.connect conninfo.reveal readOnly timeoutMs maxPrepared))
   return { conninfo, readers := ← fill true, writers := ← fill false, turn := ← IO.mkRef 0,
-           timeoutMs }
+           timeoutMs, maxPrepared }
 
 /-- The `Database` that sends `query` to the read-only sessions and `statement` to the others. -/
 def Pool.database (pool : Pool) : Database :=

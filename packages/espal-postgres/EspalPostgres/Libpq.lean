@@ -12,7 +12,8 @@ public import EspalCore.Effect
 
 Four C functions in `c/pq.c` drive one libpq connection in pipeline mode. `send` writes a
 statement without waiting for its result, and `next` blocks until the next result is complete.
-Results come back in the order the statements were sent.
+Results come back in the order the statements were sent. `send` can prepare a statement under a
+name and run it by that name later, so the server parses and plans its text once.
 
 Lean never checks this code. `lake exe postgres-test` runs it against a real server.
 
@@ -48,14 +49,18 @@ cancels a statement that runs longer than `timeoutMs` milliseconds, unless that 
 @[extern "espal_pq_connect"]
 opaque Raw.connect (conninfo : @& String) (readOnly : Bool) (timeoutMs : UInt32) : IO Raw
 
-/-- Sends one statement and returns without its result. -/
+/-- Sends one statement and returns without its result. With an empty `name` the server parses
+`sql` for this one use. With a name it runs the prepared statement of that name, and `prepare`
+says to prepare it from `sql` first, in the same batch. -/
 @[extern "espal_pq_send"]
-opaque Raw.send (raw : @& Raw) (sql : @& String) (params : @& Array String) : IO Unit
+opaque Raw.send (raw : @& Raw) (sql name : @& String) (prepare : Bool) (params : @& Array String) :
+    IO Unit
 
-/-- Waits for the next result, in the order the statements were sent. It fails when the connection
-is lost or closed. -/
+/-- Waits for the next statement's answer, in the order the statements were sent. A refusal holds
+the SQLSTATE code, the message, and whether no step of the statement had succeeded, which means a
+prepare sent with it failed. It fails when the connection is lost or closed. -/
 @[extern "espal_pq_next"]
-opaque Raw.next (raw : @& Raw) : IO (Except (String × String) Rows)
+opaque Raw.next (raw : @& Raw) : IO (Except (String × String × Bool) Rows)
 
 /-- Closes the connection to new statements and wakes a task that waits in `next`. -/
 @[extern "espal_pq_close"]
