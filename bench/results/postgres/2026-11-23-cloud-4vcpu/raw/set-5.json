@@ -1,0 +1,74 @@
+[
+  {
+    "variant": "unprepared",
+    "conns": 1,
+    "workers": 1,
+    "queries": 31863,
+    "seconds": 5.049162,
+    "queries_per_second": 6311,
+    "client_cpu_us_per_query": 124.2,
+    "postgres_cpu_percent": 47,
+    "postgres_cpu_us_per_query": 74.4,
+    "output": "espal-postgres conns=1 workers=1: 31863 queries in 5.049162s = 6311.000000 q/s"
+  },
+  {
+    "variant": "prepared",
+    "conns": 1,
+    "workers": 1,
+    "queries": 41831,
+    "seconds": 5.063262,
+    "queries_per_second": 8262,
+    "client_cpu_us_per_query": 116.4,
+    "postgres_cpu_percent": 31,
+    "postgres_cpu_us_per_query": 38.0,
+    "output": "espal-postgres conns=1 workers=1: 41831 queries in 5.063262s = 8262.000000 q/s"
+  },
+  {
+    "variant": "unprepared",
+    "conns": 1,
+    "workers": 256,
+    "queries": 117314,
+    "seconds": 5.074176,
+    "queries_per_second": 23120,
+    "client_cpu_us_per_query": 62.8,
+    "postgres_cpu_percent": 75,
+    "postgres_cpu_us_per_query": 32.5,
+    "output": "espal-postgres conns=1 workers=256: 117314 queries in 5.074176s = 23120.000000 q/s"
+  },
+  {
+    "variant": "prepared",
+    "conns": 1,
+    "workers": 256,
+    "queries": 104506,
+    "seconds": 5.133491,
+    "queries_per_second": 20358,
+    "client_cpu_us_per_query": 71.3,
+    "postgres_cpu_percent": 46,
+    "postgres_cpu_us_per_query": 22.6,
+    "output": "espal-postgres conns=1 workers=256: 104506 queries in 5.133491s = 20358.000000 q/s"
+  },
+  {
+    "variant": "unprepared",
+    "conns": 4,
+    "workers": 256,
+    "queries": 183500,
+    "seconds": 5.162253,
+    "queries_per_second": 35546,
+    "client_cpu_us_per_query": 47.8,
+    "postgres_cpu_percent": 98,
+    "postgres_cpu_us_per_query": 27.5,
+    "output": "espal-postgres conns=4 workers=256: 183500 queries in 5.162253s = 35546.000000 q/s"
+  },
+  {
+    "variant": "prepared",
+    "conns": 4,
+    "workers": 256,
+    "queries": 277081,
+    "seconds": 5.225003,
+    "queries_per_second": 53030,
+    "client_cpu_us_per_query": 35.2,
+    "postgres_cpu_percent": 92,
+    "postgres_cpu_us_per_query": 17.4,
+    "output": "espal-postgres conns=4 workers=256: 277081 queries in 5.225003s = 53030.000000 q/s"
+  }
+]

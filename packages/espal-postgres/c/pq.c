@@ -106,10 +106,14 @@ LEAN_EXPORT lean_obj_res espal_pq_connect(b_lean_obj_arg conninfo, uint8_t read_
   return lean_io_result_mk_ok(lean_alloc_external(pq_class, pq));
 }
 
-// Sends one statement with text parameters, followed by a sync, and flushes it.
-LEAN_EXPORT lean_obj_res espal_pq_send(b_lean_obj_arg obj, b_lean_obj_arg sql,
-                                       b_lean_obj_arg params) {
+// Sends one statement with text parameters, followed by a sync, and flushes it. With an empty
+// `name` the server parses the text for this one use. With a name it runs the prepared statement
+// of that name, and `prepare` says to prepare it from the text first, in the same batch.
+LEAN_EXPORT lean_obj_res espal_pq_send(b_lean_obj_arg obj, b_lean_obj_arg sql, b_lean_obj_arg name,
+                                       uint8_t prepare, b_lean_obj_arg params) {
   pq_t *pq = pq_of(obj);
+  const char *text = lean_string_cstr(sql);
+  const char *stmt = lean_string_cstr(name);
   size_t n = lean_array_size(params);
   if (n > 65535) return io_error("a statement takes at most 65535 parameters");
   const char **values = NULL;
@@ -124,8 +128,14 @@ LEAN_EXPORT lean_obj_res espal_pq_send(b_lean_obj_arg obj, b_lean_obj_arg sql,
     free(values);
     return io_error("the connection is closed");
   }
-  int ok = PQsendQueryParams(pq->conn, lean_string_cstr(sql), (int)n, NULL, values, NULL, NULL, 0) &&
-           PQpipelineSync(pq->conn);
+  int ok;
+  if (stmt[0] == '\0') {
+    ok = PQsendQueryParams(pq->conn, text, (int)n, NULL, values, NULL, NULL, 0);
+  } else {
+    ok = (!prepare || PQsendPrepare(pq->conn, stmt, text, 0, NULL)) &&
+         PQsendQueryPrepared(pq->conn, stmt, (int)n, values, NULL, NULL, 0);
+  }
+  ok = ok && PQpipelineSync(pq->conn);
   free(values);
   if (!ok) {
     lean_obj_res e = io_error(PQerrorMessage(pq->conn));
@@ -176,23 +186,30 @@ static lean_obj_res rows_of(const PGresult *r) {
   return out;
 }
 
-// `Except.error (sqlstate, message)` for a statement the server refused.
-static lean_obj_res refused_of(const PGresult *r) {
+// `Except.error (sqlstate, message, first)` for a statement the server refused. `first` says
+// that no step of the statement succeeded before the refusal, so a prepare sent with it failed.
+static lean_obj_res refused_of(const PGresult *r, int first) {
   const char *state = PQresultErrorField(r, PG_DIAG_SQLSTATE);
   const char *message = PQresultErrorField(r, PG_DIAG_MESSAGE_PRIMARY);
-  lean_object *pair = lean_alloc_ctor(0, 2, 0);
-  lean_ctor_set(pair, 0, lean_mk_string(state ? state : ""));
-  lean_ctor_set(pair, 1, lean_mk_string(message ? message : PQresultErrorMessage(r)));
+  lean_object *tail = lean_alloc_ctor(0, 2, 0);
+  lean_ctor_set(tail, 0, lean_mk_string(message ? message : PQresultErrorMessage(r)));
+  lean_ctor_set(tail, 1, lean_box(first ? 1 : 0));
+  lean_object *triple = lean_alloc_ctor(0, 2, 0);
+  lean_ctor_set(triple, 0, lean_mk_string(state ? state : ""));
+  lean_ctor_set(triple, 1, tail);
   lean_object *error = lean_alloc_ctor(0, 1, 0);
-  lean_ctor_set(error, 0, pair);
+  lean_ctor_set(error, 0, triple);
   return error;
 }
 
-// Blocks until the next statement's result is complete, and returns it as
-// `Except (String × String) Rows`. A lost connection is an IO error.
+// Blocks until the next statement's results are complete, and returns them as
+// `Except (String × String × Bool) Rows`. A statement sent with a prepare has two results. The
+// answer is the first refusal if there is one, and the last result otherwise. A lost connection
+// is an IO error.
 LEAN_EXPORT lean_obj_res espal_pq_next(b_lean_obj_arg obj) {
   pq_t *pq = pq_of(obj);
   lean_object *answer = NULL;
+  int succeeded = 0, refused = 0;
   pthread_mutex_lock(&pq->mu);
   for (;;) {
     if (pq->closed) {
@@ -224,18 +241,27 @@ LEAN_EXPORT lean_obj_res espal_pq_next(b_lean_obj_arg obj) {
         if (answer == NULL) return io_error("the server sent no result for a statement");
         return lean_io_result_mk_ok(answer);
       }
-      if (answer == NULL) {
-        if (st == PGRES_TUPLES_OK || st == PGRES_COMMAND_OK) {
+      if (st == PGRES_TUPLES_OK || st == PGRES_COMMAND_OK) {
+        if (!refused) {
+          if (answer) lean_dec(answer);
           answer = lean_alloc_ctor(1, 1, 0);
           lean_ctor_set(answer, 0, rows_of(r));
-        } else if (st == PGRES_FATAL_ERROR && PQstatus(pq->conn) == CONNECTION_OK) {
-          answer = refused_of(r);
-        } else {
-          lean_obj_res e = io_error(PQresultErrorMessage(r));
-          PQclear(r);
-          pthread_mutex_unlock(&pq->mu);
-          return e;
+          succeeded++;
         }
+      } else if (st == PGRES_PIPELINE_ABORTED) {
+        // A step after a refused one in the same statement. The refusal is the answer.
+      } else if (st == PGRES_FATAL_ERROR && PQstatus(pq->conn) == CONNECTION_OK) {
+        if (!refused) {
+          if (answer) lean_dec(answer);
+          answer = refused_of(r, succeeded == 0);
+          refused = 1;
+        }
+      } else {
+        lean_obj_res e = io_error(PQresultErrorMessage(r));
+        PQclear(r);
+        pthread_mutex_unlock(&pq->mu);
+        if (answer) lean_dec(answer);
+        return e;
       }
       PQclear(r);
     }
